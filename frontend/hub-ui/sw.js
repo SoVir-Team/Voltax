@@ -2,19 +2,36 @@
 // - App shell: cached, so the app opens instantly and works offline.
 // - API (/api/...): NEVER cached. Device state must always be live from the hub,
 //   so the app can never show a stale "on" for a light that is off.
-const CACHE = 'voltax-shell-v3'; // bump on every UI release so installed apps refresh
+const CACHE = 'voltax-shell-v4'; // bump on every UI release so installed apps refresh
+// Every file the app needs to open offline. Add new files here (see README.md).
 const SHELL = [
   './',
   'index.html',
-  'styles.css',
-  'app.js',
-  'logo.svg',
-  'logo-wordmark.svg',
   'manifest.webmanifest',
-  'icon-192.png',
-  'icon-512.png',
-  'icon-maskable-512.png',
-  'apple-touch-icon.png',
+  'css/styles.css',
+  'js/main.js',
+  'js/router.js',
+  'js/pwa.js',
+  'js/core/api.js',
+  'js/core/dom.js',
+  'js/core/format.js',
+  'js/core/state.js',
+  'js/services/live.js',
+  'js/services/session.js',
+  'js/components/controls.js',
+  'js/views/access.js',
+  'js/views/automations.js',
+  'js/views/device.js',
+  'js/views/home.js',
+  'js/views/hub.js',
+  'js/views/pair.js',
+  'js/views/schedules.js',
+  'assets/brand/logo.svg',
+  'assets/brand/logo-wordmark.svg',
+  'assets/icons/icon-192.png',
+  'assets/icons/icon-512.png',
+  'assets/icons/icon-maskable-512.png',
+  'assets/icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {
