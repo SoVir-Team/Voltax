@@ -13,6 +13,7 @@ import {
   parseEntityId,
   renameSchema,
   scheduleInputSchema,
+  updatePolicyBodySchema,
   wsClientMessageSchema,
   type ClientView,
   type HealthView,
@@ -29,6 +30,7 @@ import type { EventLog } from './events.js';
 import type { SupportGrants } from './grants.js';
 import { InvalidScheduleError, type Scheduler } from './scheduler.js';
 import type { Store } from './store.js';
+import type { UpdateService } from './updates.js';
 
 export interface ApiDeps {
   hubId: string;
@@ -40,6 +42,7 @@ export interface ApiDeps {
   auth: Auth;
   audit: AuditLog;
   grants: SupportGrants;
+  updates: UpdateService;
   scheduler: Scheduler;
   automations: AutomationEngine;
   health: () => HealthView;
@@ -279,6 +282,24 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     if (r === 'already_ended') return reply.status(409).send({ error: 'this support session has already ended' });
     return deps.grants.get(req.params.id);
   });
+
+  // --- fleet updates (owner): policy and decisions on offers from VOLTEX ---
+  app.get('/api/v1/updates', can('update.manage'), async () => deps.updates.view());
+  app.put('/api/v1/updates/policy', can('update.manage'), async (req, reply) => {
+    const body = parse(updatePolicyBodySchema, req.body, reply);
+    if (!body) return reply;
+    deps.updates.setPolicy(body.policy, actor(req));
+    return deps.updates.view();
+  });
+  for (const decision of ['approve', 'decline'] as const) {
+    app.post<{ Params: { rolloutId: string } }>(`/api/v1/updates/:rolloutId/${decision}`, can('update.manage'), async (req, reply) => {
+      const r = deps.updates[decision](req.params.rolloutId, req.client!.clientId);
+      if (r === 'not_found') return reply.status(404).send({ error: 'update offer not found' });
+      if (r === 'already_decided') return reply.status(409).send({ error: 'this offer was already decided or withdrawn' });
+      if (r === 'busy') return reply.status(409).send({ error: 'another update is in progress' });
+      return deps.updates.view();
+    });
+  }
 
   // --- audit (owner) ---
   app.get<{ Querystring: { afterSeq?: string } }>('/api/v1/audit', can('audit.read'), async (req) => ({

@@ -128,7 +128,10 @@ export type HubEventType =
   | 'support.requested'
   | 'support.started'
   | 'support.ended'
-  | 'support.inflight';
+  | 'support.inflight'
+  | 'update.offered'
+  | 'update.decided'
+  | 'update.result';
 
 // WebSocket: client must send `auth` first; server then streams events.
 export const wsClientMessageSchema = z.object({

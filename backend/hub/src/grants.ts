@@ -47,6 +47,11 @@ export interface SupportGrantDeps {
   diagnostics: () => Diagnostics;
   /** Hub restart requested under a grant (wired by the cloud link; default: refuse). */
   restart?: () => boolean;
+  /** Fleet update offers (verified here, decided by the owner's policy). Return a refusal reason or null. */
+  updates?: {
+    offer(env: Extract<CloudEnvelope, { type: 'hub.update' }>): string | null;
+    withdraw(env: Extract<CloudEnvelope, { type: 'hub.update.withdraw' }>): string | null;
+  };
   now?: () => number;
 }
 
@@ -82,6 +87,11 @@ export class SupportGrants {
   /** Where hub -> cloud messages go (set by the cloud link). */
   setSink(send: (msg: HubMessage) => void): void {
     this.send = send;
+  }
+
+  /** Sends another service's message (e.g. update status) through the same cloud sink. */
+  forward(msg: HubMessage): void {
+    this.send(msg);
   }
 
   start(): void {
@@ -128,7 +138,12 @@ export class SupportGrants {
         case 'hub.restart':
           return this.restart(env);
         case 'hub.update':
-          return this.refuse(actorId(env.actor), env.type, 'hub updates are handled by the update service', env.envelopeId);
+        case 'hub.update.withdraw': {
+          const updates = this.deps.updates;
+          const refused = !updates ? 'updates are not available on this hub' : env.type === 'hub.update' ? updates.offer(env) : updates.withdraw(env);
+          if (refused) this.refuse(actorId(env.actor), env.type, refused, env.envelopeId, { rolloutId: env.rolloutId });
+          return;
+        }
       }
     } catch (err) {
       this.refuse(actorId(env.actor), env.type, `hub error: ${(err as Error).message}`, env.envelopeId);

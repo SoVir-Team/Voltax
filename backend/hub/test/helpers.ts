@@ -87,7 +87,7 @@ export interface LocalBroker {
 }
 
 export async function startEnv(
-  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean; cloudUrl?: string; cloudPassword?: string; localBroker?: LocalBroker } = {},
+  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean; cloudUrl?: string; cloudPassword?: string; localBroker?: LocalBroker; version?: string } = {},
 ): Promise<TestEnv> {
   const broker = opts.localBroker ?? (await startBroker());
   const dir = opts.dir ?? mkdtempSync(join(tmpdir(), 'voltax-hub-'));
@@ -103,7 +103,7 @@ export async function startEnv(
       MQTT_USERNAME: 'hub',
       MQTT_PASSWORD: opts.localBroker?.hubPassword ?? 'x',
       TZ: 'UTC',
-      VOLTAX_VERSION: 'test',
+      VOLTAX_VERSION: opts.version ?? 'test',
       TIME_SYNC_FILE: syncFile,
       CLOUD_COMMAND_PUBKEY_PEM: opts.cloudKeyPem ?? null,
       UPDATE_DIR: join(dir, 'update-request'),

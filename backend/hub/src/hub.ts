@@ -15,7 +15,7 @@ import { SupportGrants } from './grants.js';
 import { MqttLink } from './mqtt-link.js';
 import { Scheduler } from './scheduler.js';
 import { Store } from './store.js';
-import { UpdateDropbox } from './updates.js';
+import { UpdateDropbox, UpdateService } from './updates.js';
 
 export interface Hub {
   app: FastifyInstance;
@@ -30,6 +30,7 @@ export interface Hub {
   store: Store;
   grants: SupportGrants;
   updates: UpdateDropbox;
+  updateService: UpdateService;
   /** Only when CLOUD_URL is configured. */
   cloud: CloudLink | null;
   start(): Promise<void>;
@@ -128,6 +129,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
     };
   };
 
+  const updateService = new UpdateService({ db, audit, events, dropbox: updates, currentVersion: config.VOLTAX_VERSION });
   const grants = new SupportGrants({
     db,
     events,
@@ -136,8 +138,10 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
     store,
     verifier,
     diagnostics,
+    updates: updateService,
     ...(config.onRestartRequested ? { restart: config.onRestartRequested } : {}),
   });
+  updateService.setSink((msg) => grants.forward(msg));
 
   const cloud = config.CLOUD_URL
     ? new CloudLink(
@@ -165,6 +169,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       auth,
       audit,
       grants,
+      updates: updateService,
       scheduler,
       automations,
       health,
@@ -189,6 +194,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
     store,
     grants,
     updates,
+    updateService,
     cloud,
     async start() {
       const failed = commands.recoverAfterRestart();
@@ -197,6 +203,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       mqtt.start();
       scheduler.start();
       grants.start();
+      updateService.start();
       cloud?.start();
       housekeeping = setInterval(() => {
         commands.prune();
@@ -209,6 +216,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       clearInterval(housekeeping);
       scheduler.stop();
       grants.stop();
+      updateService.stop();
       automations.stop();
       commands.stop();
       await cloud?.stop();

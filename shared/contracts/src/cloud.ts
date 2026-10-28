@@ -108,6 +108,8 @@ export const cloudEnvelopeSchema = z.discriminatedUnion('type', [
     rolloutId: z.uuid(),
     version: z.string().regex(/^\d+\.\d+\.\d+(-[0-9a-z.]+)?$/i),
   }),
+  // A halted or cancelled rollout takes back an offer the owner has not decided yet.
+  z.object({ ...envelopeBase, type: z.literal('hub.update.withdraw'), rolloutId: z.uuid() }),
 ]);
 export type CloudEnvelope = z.infer<typeof cloudEnvelopeSchema>;
 export type CloudEnvelopeType = CloudEnvelope['type'];
@@ -125,7 +127,8 @@ export function maxLifetimeMs(type: CloudEnvelopeType): number {
 
 // --- hub -> cloud ------------------------------------------------------------------------------
 
-export const updateStateSchema = z.enum(['idle', 'awaiting_approval', 'requested', 'applying', 'done', 'failed', 'rolled_back']);
+// declined = the owner said no (not a failure); withdrawn = the cloud took the offer back.
+export const updateStateSchema = z.enum(['idle', 'awaiting_approval', 'declined', 'withdrawn', 'requested', 'applying', 'done', 'failed', 'rolled_back']);
 export type UpdateState = z.infer<typeof updateStateSchema>;
 
 /**
