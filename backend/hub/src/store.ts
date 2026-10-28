@@ -74,6 +74,14 @@ export class Store {
     }));
   }
 
+  renameDevice(deviceId: string, name: string): boolean {
+    return this.db.prepare('UPDATE devices SET name = ? WHERE device_id = ?').run(name, deviceId).changes > 0;
+  }
+
+  renameEntity(id: string, name: string): boolean {
+    return this.db.prepare('UPDATE entities SET name = ? WHERE entity_id = ?').run(name, id).changes > 0;
+  }
+
   deleteDevice(deviceId: string): boolean {
     return this.db.transaction(() => {
       this.db.prepare('DELETE FROM entities WHERE device_id = ?').run(deviceId);

@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "dev": "npm run build -w @voltax/contracts && npm run build && node dev/dev-hub.mjs"
   },
   "dependencies": {
     "@fastify/static": "^10.1.8",

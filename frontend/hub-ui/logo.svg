@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 220" role="img" aria-label="VOLTAX">
+  <defs>
+    <linearGradient id="bolt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4FC3F1"/>
+      <stop offset="0.55" stop-color="#1FA9E1"/>
+      <stop offset="1" stop-color="#0B8CC8"/>
+    </linearGradient>
+    <linearGradient id="facet" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- bolt sits behind the wordmark, like the original mark -->
+  <path d="M236 6 L150 120 L206 120 L176 214 L282 92 L226 92 L262 6 Z" fill="url(#bolt)"/>
+  <path d="M236 6 L150 120 L206 120 L226 92 Z" fill="url(#facet)"/>
+  <text x="210" y="168" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="76" font-weight="800" letter-spacing="14" fill="#1F2A4D">VOLTAX</text>
+</svg>

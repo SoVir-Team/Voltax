@@ -6,6 +6,7 @@ import {
   automationInputSchema,
   commandRequestSchema,
   pairRequestSchema,
+  renameSchema,
   scheduleInputSchema,
   wsClientMessageSchema,
   type HealthView,
@@ -90,6 +91,17 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
   app.delete<{ Params: { id: string } }>('/api/v1/devices/:id', ownerOnly, async (req, reply) =>
     deps.store.deleteDevice(req.params.id) ? reply.status(204).send() : reply.status(404).send({ error: 'device not found' }),
   );
+
+  app.patch<{ Params: { id: string } }>('/api/v1/devices/:id', ownerOnly, async (req, reply) => {
+    const body = parse(renameSchema, req.body, reply);
+    if (!body) return;
+    return deps.store.renameDevice(req.params.id, body.name) ? reply.status(204).send() : reply.status(404).send({ error: 'device not found' });
+  });
+  app.patch<{ Params: { id: string } }>('/api/v1/entities/:id', ownerOnly, async (req, reply) => {
+    const body = parse(renameSchema, req.body, reply);
+    if (!body) return;
+    return deps.store.renameEntity(req.params.id, body.name) ? reply.status(204).send() : reply.status(404).send({ error: 'entity not found' });
+  });
 
   app.post<{ Params: { id: string } }>('/api/v1/entities/:id/commands', anyClient, async (req, reply) => {
     const body = parse(commandRequestSchema, req.body, reply);

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "voltax-dev-hub",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "backend/hub"],
+      "port": 8080
+    }
+  ]
+}

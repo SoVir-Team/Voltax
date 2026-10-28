@@ -128,6 +128,17 @@ describe('command manager (local path: API -> MQTT -> device)', () => {
   });
 });
 
+describe('naming', () => {
+  it('lets an owner give devices and entities friendly names', async () => {
+    const r1 = await env.hub.app.inject({ method: 'PATCH', url: '/api/v1/devices/esp-relay-01', headers: auth, payload: { name: 'Living room' } });
+    const r2 = await env.hub.app.inject({ method: 'PATCH', url: `/api/v1/entities/${RELAY}`, headers: auth, payload: { name: 'Ceiling light' } });
+    expect([r1.statusCode, r2.statusCode]).toEqual([204, 204]);
+    const devices = (await env.hub.app.inject({ method: 'GET', url: '/api/v1/devices', headers: auth })).json();
+    expect(devices[0]).toMatchObject({ name: 'Living room', entities: expect.arrayContaining([expect.objectContaining({ name: 'Ceiling light' })]) });
+    expect((await env.hub.app.inject({ method: 'PATCH', url: '/api/v1/entities/x.switch.y', headers: auth, payload: { name: 'n' } })).statusCode).toBe(404);
+  });
+});
+
 describe('state handling', () => {
   it('reports device state changes from physical switches as events', async () => {
     const before = env.hub.events.lastSeq();

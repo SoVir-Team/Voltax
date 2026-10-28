@@ -33,7 +33,10 @@ export const pairRequestSchema = z.object({
 });
 export type PairRequest = z.infer<typeof pairRequestSchema>;
 
-export const roleSchema = z.enum(['owner', 'member']);
+export const renameSchema = z.object({ name: z.string().trim().min(1).max(64) });
+export type RenameInput = z.infer<typeof renameSchema>;
+
+export const roleSchema =z.enum(['owner', 'member']);
 export type Role = z.infer<typeof roleSchema>;
 
 export const scheduleInputSchema = z.object({

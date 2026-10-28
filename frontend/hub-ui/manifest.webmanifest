@@ -1,0 +1,22 @@
+{
+  "name": "VOLTAX Home",
+  "short_name": "VOLTAX",
+  "description": "Control your VOLTAX smart home, even when the internet is down.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "categories": ["lifestyle", "utilities"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Schedules", "url": "./#/schedules", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Automations", "url": "./#/automations", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}

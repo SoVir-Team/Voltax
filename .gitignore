@@ -16,3 +16,6 @@ secrets.yaml
 .claude/*.local.md
 .esphome/
 firmware/esphome/.esphome/
+
+# local dev hub data
+backend/hub/.dev-data/
