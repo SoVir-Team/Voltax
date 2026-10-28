@@ -3,7 +3,7 @@
 #
 #   scp -r deploy/pi voltax-admin@voltax-hub-001.local:~/voltax-deploy
 #   ssh voltax-admin@voltax-hub-001.local
-#   sudo ~/voltax-deploy/provision.sh --hub-id voltax-hub-001 --hub-name "My Home"
+#   sudo bash ~/voltax-deploy/provision.sh --hub-id voltax-hub-001 --hub-name "My Home"
 #
 # What it does: OS updates, Docker Engine + Compose (official repo), log limits, hardware
 # watchdog, SSH key-only login, LAN-only firewall, service users/dirs/permissions, broker

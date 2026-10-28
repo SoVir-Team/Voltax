@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # MQTT least-privilege test (plan §6.2). Run ON THE PI against the real broker:
-#   sudo ~/voltax-deploy/tests/mqtt-acl-test.sh
+#   sudo bash ~/voltax-deploy/tests/mqtt-acl-test.sh
 # Creates two throw-away device users (acltest-a, acltest-b), proves each can only use its own
 # topics, then deletes them. Positive controls make sure "nothing delivered" is not a broken test.
 set -uo pipefail

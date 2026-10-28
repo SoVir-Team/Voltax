@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Backup/restore test (plan §6.4). Run ON A TEST HUB: it restores the database, so anything
 # written during the test window is rolled back.
-#   sudo ~/voltax-deploy/tests/backup-restore-test.sh [--yes]
+#   sudo bash ~/voltax-deploy/tests/backup-restore-test.sh [--yes]
 # 1. Device "bkptest" reports states while voltax-backup runs (backup taken under write load).
 # 2. Device "bkptest-after" appears only after the backup.
 # 3. voltax-restore: the hub comes back healthy with bkptest, without bkptest-after, every backed-up

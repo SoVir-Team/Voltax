@@ -30,7 +30,7 @@ From the repository on the installer PC:
 
 ```bash
 scp -r deploy/pi voltax-admin@voltax-hub-001.local:~/voltax-deploy
-ssh voltax-admin@voltax-hub-001.local 'sudo ~/voltax-deploy/provision.sh --hub-id voltax-hub-001 --hub-name "My Home"'
+ssh voltax-admin@voltax-hub-001.local 'sudo bash ~/voltax-deploy/provision.sh --hub-id voltax-hub-001 --hub-name "My Home"'
 ```
 
 It installs Docker, the watchdog, key-only SSH, a LAN-only firewall (22, 8443, 1883, 5353), service

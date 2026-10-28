@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Self-healing test (plan §6.4). Run ON THE PI; it disrupts the hub for several minutes:
-#   sudo ~/voltax-deploy/tests/recovery-test.sh [--yes]
+#   sudo bash ~/voltax-deploy/tests/recovery-test.sh [--yes]
 # 1. broker crash  -> Docker restarts it; the hub reconnects to MQTT on its own
 # 2. hub crash     -> Docker restarts it
 # 3. hub hangs     -> health check marks it unhealthy -> voltax-health.timer restarts it

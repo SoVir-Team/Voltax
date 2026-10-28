@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Permissions and hardening test (plan §6.4). Read-only; safe to run on a live hub:
-#   sudo ~/voltax-deploy/tests/perm-test.sh
+#   sudo bash ~/voltax-deploy/tests/perm-test.sh
 # Checks container users, capabilities, read-only filesystems and the host file modes table.
 set -uo pipefail
 # shellcheck source=lib-test.sh

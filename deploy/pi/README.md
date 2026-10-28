@@ -24,7 +24,7 @@ pi/
 
 ## Tests
 
-Run on the Pi as root from the copied folder, e.g. `sudo ~/voltax-deploy/tests/perm-test.sh`.
+Run on the Pi as root from the copied folder, e.g. `sudo bash ~/voltax-deploy/tests/perm-test.sh`.
 Each prints PASS/FAIL per check and exits non-zero on any failure.
 
 | Script | Checks | Disruptive? |
