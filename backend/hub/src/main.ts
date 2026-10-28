@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { loadConfig } from './config.js';
 import { createHub } from './hub.js';
 
@@ -8,7 +8,9 @@ const https = config.ALLOW_INSECURE_HTTP
   ? null
   : { key: readFileSync(config.TLS_KEY), cert: readFileSync(config.TLS_CERT), minVersion: 'TLSv1.2' as const };
 
-const hub = await createHub(config, {
+const cloudKey = existsSync(config.CLOUD_COMMAND_PUBKEY) ? readFileSync(config.CLOUD_COMMAND_PUBKEY, 'utf8') : null;
+
+const hub = await createHub({ ...config, CLOUD_COMMAND_PUBKEY_PEM: cloudKey }, {
   logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization'] },
   ...(https ? { https } : {}),
 });

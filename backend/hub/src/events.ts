@@ -42,6 +42,14 @@ export class EventLog {
     }));
   }
 
+  /** Events created at or after `fromMs` (oldest first). */
+  sinceTime(fromMs: number, limit = 1000): HubEvent[] {
+    const rows = this.db
+      .prepare('SELECT seq, id, type, payload, created_at FROM events WHERE created_at >= ? ORDER BY seq LIMIT ?')
+      .all(fromMs, limit) as EventRow[];
+    return rows.map((r) => ({ seq: r.seq, id: r.id, type: r.type, payload: JSON.parse(r.payload) as Record<string, unknown>, createdAt: r.created_at }));
+  }
+
   lastSeq(): number {
     const row = this.db.prepare('SELECT MAX(seq) AS seq FROM events').get() as { seq: number | null };
     return row.seq ?? 0;

@@ -23,6 +23,24 @@ const epochMs = z.number().int().positive();
 export const grantStatusSchema = z.enum(['pending', 'active', 'rejected', 'revoked', 'expired', 'completed']);
 export type GrantStatus = z.infer<typeof grantStatusSchema>;
 
+/** A support grant as stored on the hub (the authority) and mirrored by the cloud. */
+export interface GrantView {
+  grantId: string;
+  staff: { staffId: string; role: (typeof PLATFORM_ROLES)[number]; displayName: string };
+  deviceIds: string[];
+  actions: Array<(typeof GRANT_ACTIONS)[number]>;
+  reason: string;
+  ticketRef: string | null;
+  startsAt: number;
+  endsAt: number;
+  status: GrantStatus;
+  requestedAt: number;
+  decidedAt: number | null;
+  startNoticeAt: number | null;
+  endedAt: number | null;
+  endReason: string | null;
+}
+
 export const actorSchema = z.object({
   staffId: z.uuid(),
   role: z.enum(PLATFORM_ROLES),
@@ -59,7 +77,14 @@ const envelopeBase = {
 
 export const cloudEnvelopeSchema = z.discriminatedUnion('type', [
   z.object({ ...envelopeBase, type: z.literal('grant.request'), grant: grantRequestSchema }),
-  z.object({ ...envelopeBase, type: z.literal('grant.revoke'), grantId: z.uuid(), reason: z.string().trim().min(1).max(500) }),
+  z.object({
+    ...envelopeBase,
+    type: z.literal('grant.revoke'),
+    grantId: z.uuid(),
+    reason: z.string().trim().min(1).max(500),
+    // 'completed': the staff member finished the work; 'revoked': access withdrawn. Both end the grant.
+    outcome: z.enum(['revoked', 'completed']).default('revoked'),
+  }),
   z.object({
     ...envelopeBase,
     type: z.literal('command'),

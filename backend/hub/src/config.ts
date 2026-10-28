@@ -19,6 +19,8 @@ const schema = z.object({
   ALLOW_INSECURE_HTTP: bool.default(false),
   UI_DIR: z.string().default('/app/public'),
   TIME_SYNC_FILE: z.string().default('/run/systemd/timesync/synchronized'),
+  // Pinned Ed25519 public key of the VOLTEX cloud command signer (PEM). Missing = cloud requests refused.
+  CLOUD_COMMAND_PUBKEY: z.string().default('/etc/voltax/cloud-command.pub'),
   TZ: z.string().default('Asia/Kolkata'),
   VOLTAX_VERSION: z.string().default('dev'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),

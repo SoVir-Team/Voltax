@@ -26,6 +26,7 @@ import type { Auth, Client, DeviceScope } from './auth.js';
 import type { AutomationEngine } from './automations.js';
 import type { CommandManager } from './commands.js';
 import type { EventLog } from './events.js';
+import type { SupportGrants } from './grants.js';
 import { InvalidScheduleError, type Scheduler } from './scheduler.js';
 import type { Store } from './store.js';
 
@@ -38,6 +39,7 @@ export interface ApiDeps {
   commands: CommandManager;
   auth: Auth;
   audit: AuditLog;
+  grants: SupportGrants;
   scheduler: Scheduler;
   automations: AutomationEngine;
   health: () => HealthView;
@@ -255,6 +257,28 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
   app.delete<{ Params: { id: string } }>('/api/v1/automations/:id', can('automation.manage'), async (req, reply) =>
     deps.automations.delete(req.params.id) ? reply.status(204).send() : reply.status(404).send({ error: 'automation not found' }),
   );
+
+  // --- support access (owner approves on the hub; members can see that a session exists) ---
+  app.get('/api/v1/support/grants', can('grant.read'), async () => deps.grants.list());
+  app.post<{ Params: { id: string } }>('/api/v1/support/grants/:id/approve', can('grant.approve'), async (req, reply) => {
+    const r = deps.grants.approve(req.params.id, req.client!.clientId);
+    if (r === 'not_found') return reply.status(404).send({ error: 'support request not found' });
+    if (r === 'not_pending') return reply.status(409).send({ error: 'this request was already decided' });
+    if (r === 'over') return reply.status(409).send({ error: 'this request has expired' });
+    return deps.grants.get(req.params.id);
+  });
+  app.post<{ Params: { id: string } }>('/api/v1/support/grants/:id/reject', can('grant.approve'), async (req, reply) => {
+    const r = deps.grants.reject(req.params.id, req.client!.clientId);
+    if (r === 'not_found') return reply.status(404).send({ error: 'support request not found' });
+    if (r === 'not_pending') return reply.status(409).send({ error: 'this request was already decided' });
+    return deps.grants.get(req.params.id);
+  });
+  app.post<{ Params: { id: string } }>('/api/v1/support/grants/:id/revoke', can('grant.approve'), async (req, reply) => {
+    const r = deps.grants.revoke(req.params.id, req.client!.clientId);
+    if (r === 'not_found') return reply.status(404).send({ error: 'support request not found' });
+    if (r === 'already_ended') return reply.status(409).send({ error: 'this support session has already ended' });
+    return deps.grants.get(req.params.id);
+  });
 
   // --- audit (owner) ---
   app.get<{ Querystring: { afterSeq?: string } }>('/api/v1/audit', can('audit.read'), async (req) => ({

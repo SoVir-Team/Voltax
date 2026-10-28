@@ -22,6 +22,8 @@ export interface CommandView {
   value: boolean;
   source: 'local' | 'schedule' | 'automation' | 'cloud';
   status: CommandStatus;
+  /** Set for cloud commands: the support grant they were authorised by. */
+  grantId?: string;
   issuedAt: number;
   expiresAt: number;
   reason?: string;
@@ -122,7 +124,11 @@ export type HubEventType =
   | 'command.status'
   | 'schedule.fired'
   | 'automation.fired'
-  | 'hub.started';
+  | 'hub.started'
+  | 'support.requested'
+  | 'support.started'
+  | 'support.ended'
+  | 'support.inflight';
 
 // WebSocket: client must send `auth` first; server then streams events.
 export const wsClientMessageSchema = z.object({

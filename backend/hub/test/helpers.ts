@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type AddressInfo, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -77,9 +77,13 @@ export interface TestEnv {
   close: () => Promise<void>;
 }
 
-export async function startEnv(opts: { connectDevice?: boolean; dir?: string } = {}): Promise<TestEnv> {
+export async function startEnv(
+  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean } = {},
+): Promise<TestEnv> {
   const broker = await startBroker();
   const dir = opts.dir ?? mkdtempSync(join(tmpdir(), 'voltax-hub-'));
+  const syncFile = join(dir, 'time-synced');
+  if (opts.timeSynced) writeFileSync(syncFile, '');
   const hub = await createHub(
     {
       HUB_ID,
@@ -91,7 +95,8 @@ export async function startEnv(opts: { connectDevice?: boolean; dir?: string } =
       MQTT_PASSWORD: 'x',
       TZ: 'UTC',
       VOLTAX_VERSION: 'test',
-      TIME_SYNC_FILE: join(dir, 'no-such-file'),
+      TIME_SYNC_FILE: syncFile,
+      CLOUD_COMMAND_PUBKEY_PEM: opts.cloudKeyPem ?? null,
     },
     { logger: false },
   );

@@ -35,10 +35,31 @@ errors after adding `CommandManager.stop()` for clean shutdown); `npm run typech
 
 ## P2. Hub support grants
 
-- [ ] Migration 003: `support_grants`, `cloud_nonces`
-- [ ] Grant service: request intake, owner approve/reject/revoke, expiry sweeper, start/end notices
-- [ ] Envelope verifier with one test per rejection reason
-- [ ] CommandManager pre-dispatch re-check; cancel queued on revoke; in-flight race flagged
+- [x] Migration `003_support_grants.sql`: `support_grants`, `cloud_nonces`, `commands.grant_id`
+- [x] Grant service (`backend/hub/src/grants.ts`):
+  - signed request intake, with role and per-action limits; devices must exist;
+  - owner approve/reject/revoke API (`/api/v1/support/grants/...`);
+  - cloud revoke/complete (grantee or super admin);
+  - expiry sweeper, in-app start/end notices, status reported to the cloud
+- [x] Envelope verifier (`backend/hub/src/envelope.ts`):
+  - Ed25519 signature over the received bytes;
+  - hubId;
+  - trusted clock (fail-closed);
+  - skew, expiry and lifetime;
+  - single-use nonce
+- [x] CommandManager pre-dispatch re-check; queued commands cancelled on revoke; already-published commands reported as `support.inflight`
+
+Evidence (P2): `backend/hub/test/grants.test.ts`, 30 tests:
+- full lifecycle; reject; members cannot approve; no remote approval; expiry and delayed start;
+- one test per refusal: bad signature, tampered payload, other hub, expired, issued in the future,
+  lifetime, malformed, unknown grant, not the grantee ×2, admin role, device not granted, action not
+  granted, replay, unsynced clock, no key, missing notice;
+- a duplicate commandId runs once; super admin and installer request limits;
+- revocation: queued command cancelled, in-flight command reported, nothing published after revoke;
+  pre-dispatch re-check;
+- diagnostics allow-list; activity needs its own grant, is device-filtered and audited; audit chain intact.
+
+`npx vitest run` in `backend/hub` → 6 files, 81 tests passed.
 
 ## P3. Hub cloud-link
 

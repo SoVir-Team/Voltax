@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import type { FastifyInstance, FastifyServerOptions } from 'fastify';
-import type { HealthView } from '@voltax/contracts';
+import type { Diagnostics, HealthView } from '@voltax/contracts';
 import { buildApi } from './api.js';
 import { AuditLog } from './audit.js';
 import { Auth } from './auth.js';
@@ -8,7 +8,9 @@ import { AutomationEngine } from './automations.js';
 import { CommandManager } from './commands.js';
 import type { Config } from './config.js';
 import { openDb, type DB } from './db.js';
+import { EnvelopeVerifier } from './envelope.js';
 import { EventLog } from './events.js';
+import { SupportGrants } from './grants.js';
 import { MqttLink } from './mqtt-link.js';
 import { Scheduler } from './scheduler.js';
 import { Store } from './store.js';
@@ -24,6 +26,7 @@ export interface Hub {
   automations: AutomationEngine;
   events: EventLog;
   store: Store;
+  grants: SupportGrants;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -31,7 +34,7 @@ export interface Hub {
 type HubConfig = Pick<
   Config,
   'HUB_ID' | 'HUB_NAME' | 'DB_PATH' | 'BACKUP_DIR' | 'MQTT_URL' | 'MQTT_USERNAME' | 'MQTT_PASSWORD' | 'TZ' | 'VOLTAX_VERSION' | 'TIME_SYNC_FILE'
-> & { UI_DIR?: string };
+> & { UI_DIR?: string; CLOUD_COMMAND_PUBKEY_PEM?: string | null };
 
 /** Wires every module. Nothing here talks to the cloud: the hub works fully offline. */
 export async function createHub(config: HubConfig, serverOptions: FastifyServerOptions = {}): Promise<Hub> {
@@ -58,6 +61,8 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
   const scheduler = new Scheduler(db, commands, events, config.TZ);
   const automations = new AutomationEngine(db, commands, events);
   mqtt.onState((r) => automations.handleState(r));
+  const timeSynced = () => existsSync(config.TIME_SYNC_FILE);
+  const verifier = new EnvelopeVerifier(db, { hubId: config.HUB_ID, publicKeyPem: config.CLOUD_COMMAND_PUBKEY_PEM ?? null, timeSynced });
 
   const health = (): HealthView => {
     let dbUp = true;
@@ -73,10 +78,30 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       hubId: config.HUB_ID,
       db: dbUp ? 'up' : 'down',
       mqtt: mqttUp ? 'up' : 'down',
-      timeSynced: existsSync(config.TIME_SYNC_FILE),
+      timeSynced: timeSynced(),
       uptime: Math.round((Date.now() - startedAt) / 1000),
     };
   };
+
+  // Operational metadata only (no names, states or history): what support may see under a grant.
+  const diagnostics = (): Diagnostics => {
+    const h = health();
+    const counts = db
+      .prepare("SELECT status, COUNT(*) AS n FROM commands WHERE issued_at > ? AND status IN ('confirmed', 'failed', 'expired') GROUP BY status")
+      .all(Date.now() - 24 * 60 * 60 * 1000) as Array<{ status: string; n: number }>;
+    const n = (s: string) => counts.find((c) => c.status === s)?.n ?? 0;
+    return {
+      version: h.version,
+      uptime: h.uptime,
+      db: h.db,
+      mqtt: h.mqtt,
+      timeSynced: h.timeSynced,
+      devices: store.listDevices().map((d) => ({ deviceId: d.deviceId, online: d.online, lastSeen: d.lastSeen })),
+      commandsLast24h: { confirmed: n('confirmed'), failed: n('failed'), expired: n('expired') },
+      eventLogSeq: events.lastSeq(),
+    };
+  };
+  const grants = new SupportGrants({ db, events, audit, commands, store, verifier, diagnostics });
 
   const api = await buildApi(
     {
@@ -88,6 +113,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       commands,
       auth,
       audit,
+      grants,
       scheduler,
       automations,
       health,
@@ -110,12 +136,14 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
     automations,
     events,
     store,
+    grants,
     async start() {
       const failed = commands.recoverAfterRestart();
       if (failed) api.log.warn({ failed }, 'failed commands left in flight by previous run');
       events.append('hub.started', { version: config.VOLTAX_VERSION });
       mqtt.start();
       scheduler.start();
+      grants.start();
       housekeeping = setInterval(() => {
         commands.prune();
         events.prune(30 * 24 * 60 * 60 * 1000);
@@ -126,6 +154,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
     async stop() {
       clearInterval(housekeeping);
       scheduler.stop();
+      grants.stop();
       automations.stop();
       commands.stop();
       await api.close();

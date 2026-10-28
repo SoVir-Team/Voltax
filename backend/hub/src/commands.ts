@@ -17,7 +17,12 @@ export interface SubmitInput {
   source: CommandView['source'];
   ttlMs?: number;
   expiresAt?: number;
+  /** Cloud commands: the support grant that authorised it (re-checked right before dispatch). */
+  grantId?: string;
 }
+
+/** Returns a refusal reason, or null to let the command go out. Must be synchronous. */
+export type PreDispatchCheck = (command: CommandView) => string | null;
 
 export type SubmitResult =
   | { status: 200 | 202 | 410; command: CommandView }
@@ -32,6 +37,7 @@ interface CommandRow {
   reason: string | null;
   issued_at: number;
   expires_at: number;
+  grant_id: string | null;
 }
 
 interface Waiter {
@@ -54,6 +60,7 @@ export class CommandManager {
   private waiters = new Map<string, Waiter>();
   private idle: Array<() => void> = [];
   private stopped = false;
+  private preDispatch: PreDispatchCheck = () => null;
   private onStop!: () => void;
   private stopSignal = new Promise<'stopped'>((resolve) => (this.onStop = () => resolve('stopped')));
 
@@ -69,6 +76,32 @@ export class CommandManager {
       // Retained snapshots are old news, not a reaction to our command.
       if (waiter && !r.retained && r.value === waiter.value) waiter.resolve();
     });
+  }
+
+  setPreDispatch(check: PreDispatchCheck): void {
+    this.preDispatch = check;
+  }
+
+  /** Cancels commands still waiting in a queue (never published). Returns the cancelled ids. */
+  cancelQueued(match: (command: CommandView) => boolean, reason: string): string[] {
+    const cancelled: string[] = [];
+    for (const [entityId, queue] of this.queues) {
+      const keep: string[] = [];
+      for (const id of queue) {
+        const cmd = this.get(id);
+        if (cmd && cmd.status === 'pending' && match(cmd)) {
+          this.finish(cmd, 'failed', reason);
+          cancelled.push(id);
+        } else keep.push(id);
+      }
+      this.queues.set(entityId, keep);
+    }
+    return cancelled;
+  }
+
+  /** Commands of a grant that were already published and are waiting for the device's report. */
+  inFlightForGrant(grantId: string): CommandView[] {
+    return (this.db.prepare("SELECT * FROM commands WHERE grant_id = ? AND status = 'sent'").all(grantId) as CommandRow[]).map(toView);
   }
 
   /** Commands that were in flight when the hub stopped are failed, never replayed. */
@@ -97,8 +130,8 @@ export class CommandManager {
     const expired = expiresAt <= now;
     this.db
       .prepare(
-        `INSERT INTO commands (command_id, entity_id, value, source, status, reason, issued_at, expires_at, done_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO commands (command_id, entity_id, value, source, status, reason, issued_at, expires_at, done_at, grant_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.commandId,
@@ -110,6 +143,7 @@ export class CommandManager {
         now,
         expiresAt,
         expired ? now : null,
+        input.grantId ?? null,
       );
     const command = this.get(input.commandId)!;
     this.emit(command);
@@ -173,6 +207,9 @@ export class CommandManager {
     if (Date.now() >= cmd.expiresAt) return this.finish(cmd, 'expired', 'deadline passed while queued');
     if (!this.transport.connected) return this.finish(cmd, 'failed', 'hub not connected to broker');
     if (!this.store.isDeviceOnline(ref.deviceId)) return this.finish(cmd, 'failed', 'device offline');
+    // Last authorisation check, immediately before the publish below (no await in between).
+    const refusal = this.preDispatch(cmd);
+    if (refusal) return this.finish(cmd, 'failed', refusal);
 
     let confirm!: () => void;
     const confirmed = new Promise<void>((resolve) => (confirm = resolve));
@@ -230,5 +267,6 @@ function toView(r: CommandRow): CommandView {
     issuedAt: r.issued_at,
     expiresAt: r.expires_at,
     ...(r.reason ? { reason: r.reason } : {}),
+    ...(r.grant_id ? { grantId: r.grant_id } : {}),
   };
 }
