@@ -53,6 +53,9 @@ export class CommandManager {
   private busy = new Set<string>();
   private waiters = new Map<string, Waiter>();
   private idle: Array<() => void> = [];
+  private stopped = false;
+  private onStop!: () => void;
+  private stopSignal = new Promise<'stopped'>((resolve) => (this.onStop = () => resolve('stopped')));
 
   constructor(
     private db: DB,
@@ -130,6 +133,16 @@ export class CommandManager {
     await new Promise<void>((resolve) => this.idle.push(resolve));
   }
 
+  /**
+   * Hub shutdown: stop touching the database. Commands still in flight are left as pending/sent and
+   * marked failed by recoverAfterRestart() on the next start (never replayed).
+   */
+  stop(): void {
+    this.stopped = true;
+    this.onStop();
+    for (const done of this.idle.splice(0)) done();
+  }
+
   prune(olderThanMs = 24 * 60 * 60 * 1000): number {
     return this.db
       .prepare("DELETE FROM commands WHERE issued_at < ? AND status NOT IN ('pending', 'sent')")
@@ -137,7 +150,7 @@ export class CommandManager {
   }
 
   private async pump(entityId: string): Promise<void> {
-    if (this.busy.has(entityId)) return;
+    if (this.stopped || this.busy.has(entityId)) return;
     const queue = this.queues.get(entityId);
     const next = queue?.shift();
     if (!next) {
@@ -171,13 +184,15 @@ export class CommandManager {
       } catch (err) {
         return this.finish(cmd, 'failed', `publish failed: ${(err as Error).message}`);
       }
+      if (this.stopped) return;
       this.db.prepare("UPDATE commands SET status = 'sent', sent_at = ? WHERE command_id = ?").run(Date.now(), commandId);
       this.emit(this.get(commandId)!);
 
       const timedOut = new Promise<'timeout'>((resolve) => {
         timer = setTimeout(() => resolve('timeout'), Math.max(0, cmd.expiresAt - Date.now()));
       });
-      const outcome = await Promise.race([confirmed.then(() => 'confirmed' as const), timedOut]);
+      const outcome = await Promise.race([confirmed.then(() => 'confirmed' as const), timedOut, this.stopSignal]);
+      if (outcome === 'stopped') return;
       if (outcome === 'confirmed') return this.finish(cmd, 'confirmed', null);
 
       // No fresh report, but the device already reports the requested state (e.g. ON while ON).
@@ -193,6 +208,7 @@ export class CommandManager {
   }
 
   private finish(cmd: CommandView, status: CommandStatus, reason: string | null): void {
+    if (this.stopped) return;
     this.db
       .prepare('UPDATE commands SET status = ?, reason = ?, done_at = ? WHERE command_id = ?')
       .run(status, reason, Date.now(), cmd.commandId);

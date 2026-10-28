@@ -102,7 +102,8 @@ function Invite() {
 
   async function create() {
     try {
-      const { data } = await api<PairingCode>('/pairing-codes', { method: 'POST' });
+      // Device picker comes with the access screen rework; until then the owner invites for every device.
+      const { data } = await api<PairingCode>('/pairing-codes', { method: 'POST', body: { devices: '*' } });
       setNow(Date.now());
       setInvite(data);
     } catch (err) {

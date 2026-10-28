@@ -1,9 +1,14 @@
 // Installer CLI, run inside the hub container (see deploy/pi/voltax-hubctl):
-//   pairing-code [--role owner|member]   print a one-time pairing code (stdout only, never logged)
+//   pairing-code [--role owner|member] [--devices id,id|*]
+//                                        print a one-time pairing code (stdout only, never logged);
+//                                        members get only the listed devices (default: every device)
 //   clients                              list paired clients
 //   revoke <clientId> [--force]          revoke a client (--force allows the last owner)
 //   remove-device <deviceId>             forget a device (its MQTT credential is removed by remove-device.sh)
-import { Auth } from './auth.js';
+//   audit-verify                         recompute the audit hash chain
+// Every change made here is written to the hub audit log as actor "installer-cli".
+import { AuditLog } from './audit.js';
+import { Auth, type DeviceGrant } from './auth.js';
 import { loadConfig } from './config.js';
 import { openDb } from './db.js';
 import { Store } from './store.js';
@@ -12,6 +17,8 @@ const [command, ...args] = process.argv.slice(2);
 const config = loadConfig({ MQTT_PASSWORD: 'unused-by-cli', ...process.env });
 const db = openDb(config.DB_PATH, { backupDir: config.BACKUP_DIR });
 const auth = new Auth(db);
+const audit = new AuditLog(db);
+const CLI = 'installer-cli';
 
 function flag(name: string): string | undefined {
   const i = args.indexOf(name);
@@ -23,7 +30,10 @@ try {
     case 'pairing-code': {
       const role = flag('--role') ?? 'owner';
       if (role !== 'owner' && role !== 'member') throw new Error('--role must be owner or member');
-      const { code, expiresAt } = auth.createPairingCode(role);
+      const list = flag('--devices') ?? '*';
+      const devices: DeviceGrant = list === '*' ? '*' : list.split(',').map((d) => d.trim()).filter(Boolean);
+      const { code, expiresAt } = auth.createPairingCode(role, undefined, devices);
+      audit.append({ actor: CLI, action: 'client.invite', outcome: 'ok', details: { role, ...(role === 'member' ? { devices } : {}) } });
       const pretty = `${code.slice(0, 5)}-${code.slice(5)}`;
       // Machine-readable last line so voltax-hubctl can render it as a QR code.
       process.stdout.write(
@@ -53,7 +63,7 @@ try {
       break;
     }
     default:
-      throw new Error('usage: cli.js pairing-code [--role owner|member] | clients | revoke <clientId> [--force] | remove-device <deviceId>');
+      throw new Error('usage: cli.js pairing-code [--role owner|member] [--devices id,id|*] | clients | revoke <clientId> [--force] | remove-device <deviceId> | audit-verify');
   }
 } catch (err) {
   process.stderr.write(`${(err as Error).message}\n`);

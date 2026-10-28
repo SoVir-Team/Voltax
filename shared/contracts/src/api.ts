@@ -36,8 +36,26 @@ export type PairRequest = z.infer<typeof pairRequestSchema>;
 export const renameSchema = z.object({ name: z.string().trim().min(1).max(64) });
 export type RenameInput = z.infer<typeof renameSchema>;
 
-export const roleSchema =z.enum(['owner', 'member']);
+export const roleSchema = z.enum(['owner', 'member']);
 export type Role = z.infer<typeof roleSchema>;
+
+/** Devices a member may see and control: '*' (every device, explicitly chosen) or a list of device ids. */
+export const deviceGrantSchema = z.union([z.literal('*'), z.array(z.string().regex(/^[a-z0-9_-]{1,64}$/i)).max(200)]);
+export type DeviceGrantInput = z.infer<typeof deviceGrantSchema>;
+
+/** POST /pairing-codes: the owner must say which devices the new member gets. */
+export const inviteSchema = z.object({ devices: deviceGrantSchema });
+export const memberDevicesSchema = z.object({ devices: deviceGrantSchema });
+
+export interface ClientView {
+  clientId: string;
+  name: string;
+  role: Role;
+  createdAt: number;
+  revokedAt: number | null;
+  /** Members only. */
+  devices?: DeviceGrantInput;
+}
 
 export const scheduleInputSchema = z.object({
   name: z.string().trim().min(1).max(64),

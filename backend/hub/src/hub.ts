@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import type { FastifyInstance, FastifyServerOptions } from 'fastify';
 import type { HealthView } from '@voltax/contracts';
 import { buildApi } from './api.js';
+import { AuditLog } from './audit.js';
 import { Auth } from './auth.js';
 import { AutomationEngine } from './automations.js';
 import { CommandManager } from './commands.js';
@@ -16,6 +17,7 @@ export interface Hub {
   app: FastifyInstance;
   db: DB;
   auth: Auth;
+  audit: AuditLog;
   mqtt: MqttLink;
   commands: CommandManager;
   scheduler: Scheduler;
@@ -38,6 +40,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
   const events = new EventLog(db);
   const store = new Store(db);
   const auth = new Auth(db);
+  const audit = new AuditLog(db);
 
   // The app logger only exists after buildApi(); MQTT logs go through it once it does.
   let app: FastifyInstance | undefined;
@@ -84,6 +87,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       events,
       commands,
       auth,
+      audit,
       scheduler,
       automations,
       health,
@@ -99,6 +103,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
     app: api,
     db,
     auth,
+    audit,
     mqtt,
     commands,
     scheduler,
@@ -122,6 +127,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       clearInterval(housekeeping);
       scheduler.stop();
       automations.stop();
+      commands.stop();
       await api.close();
       await mqtt.stop();
       db.close();

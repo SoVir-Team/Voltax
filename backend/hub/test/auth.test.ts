@@ -75,18 +75,18 @@ describe('pairing', () => {
 describe('roles and revocation', () => {
   it('lets an owner invite a member; members cannot manage clients or schedules', async () => {
     const owner = await pairOwner(env.hub);
-    const invite = await env.hub.app.inject({ method: 'POST', url: '/api/v1/pairing-codes', headers: owner });
+    const invite = await env.hub.app.inject({ method: 'POST', url: '/api/v1/pairing-codes', headers: owner, payload: { devices: '*' } });
     expect(invite.statusCode).toBe(201);
     const member = (await pair(invite.json<{ code: string }>().code)).json<{ token: string; role: string }>();
     expect(member.role).toBe('member');
     const headers = { authorization: `Bearer ${member.token}` };
     expect((await env.hub.app.inject({ method: 'GET', url: '/api/v1/clients', headers })).statusCode).toBe(403);
-    expect((await env.hub.app.inject({ method: 'POST', url: '/api/v1/pairing-codes', headers })).statusCode).toBe(403);
+    expect((await env.hub.app.inject({ method: 'POST', url: '/api/v1/pairing-codes', headers, payload: { devices: '*' } })).statusCode).toBe(403);
   });
 
   it('revokes a client immediately and protects the last owner', async () => {
     const owner = await pairOwner(env.hub);
-    const invite = (await env.hub.app.inject({ method: 'POST', url: '/api/v1/pairing-codes', headers: owner })).json<{ code: string }>();
+    const invite = (await env.hub.app.inject({ method: 'POST', url: '/api/v1/pairing-codes', headers: owner, payload: { devices: '*' } })).json<{ code: string }>();
     const member = (await pair(invite.code)).json<{ token: string; clientId: string }>();
     const del = await env.hub.app.inject({ method: 'DELETE', url: `/api/v1/clients/${member.clientId}`, headers: owner });
     expect(del.statusCode).toBe(204);

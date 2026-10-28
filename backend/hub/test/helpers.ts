@@ -43,7 +43,7 @@ export class FakeDevice {
       this.received.push({ topic, payload: payload.toString(), retain: packet.retain ?? false });
       if (this.ignoreCommands) return;
       const v = payload.toString();
-      if (v === 'ON' || v === 'OFF') void this.setRelay(v === 'ON');
+      if (v === 'ON' || v === 'OFF') this.setRelay(v === 'ON').catch(() => {}); // may race with close() in tests
     });
     await this.client.subscribeAsync(`${PREFIX}/switch/relay_1/command`, { qos: 0 });
     await this.client.publishAsync(`${PREFIX}/status`, 'online', { qos: 1, retain: true });

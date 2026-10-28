@@ -25,10 +25,13 @@ audit read restricted, member limits, envelope and telemetry allow-list validati
 
 ## P1. Hub authorisation
 
-- [ ] Deny-by-default route guard (every `/api` route declares auth or is on the public allow-list; test enumerates routes)
-- [ ] Member device permissions (migration 002; existing members keep all devices explicitly), REST + WebSocket filtering
-- [ ] Hub audit log: append-only triggers, hash chain, redaction, verify
-- [ ] Negative tests: member reads/controls ungranted device, revoked token, forged role, events of other devices
+- [x] Deny-by-default route guard: `onRoute` refuses any `/api` route without a `HomeAction` guard; one `preHandler` checks the permission matrix (`backend/hub/src/api.ts`)
+- [x] Member device permissions: migration `002_member_devices_audit.sql` (existing members migrated to explicit `*`), invites must name devices, `PUT /api/v1/clients/:id/devices`, REST + WebSocket filtering re-read per request/event
+- [x] Hub audit log (`backend/hub/src/audit.ts`): append-only triggers, sha256 chain, redaction, `verify()`, `GET /api/v1/audit` (owner), CLI `audit-verify`; CLI actions audited as `installer-cli`
+- [x] Negative tests (`backend/hub/test/authz.test.ts`, 12 tests): route enumeration, unguarded/wrongly-public route refused, no/bad/revoked token, client-claimed role ignored, ungranted device indistinguishable from missing, commands/events/schedules/automations of other devices hidden, every owner-only action 403 for members, live scope change on open WebSocket, owner scope cannot be narrowed, audit without secrets, UPDATE/DELETE refused, tampering detected
+
+Evidence (P1): `npx vitest run` in `backend/hub` → 5 files, 51 tests passed (run twice, no unhandled
+errors after adding `CommandManager.stop()` for clean shutdown); `npm run typecheck` clean.
 
 ## P2. Hub support grants
 

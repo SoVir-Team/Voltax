@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -31,12 +32,14 @@ describe('database', () => {
     const migrations = join(dir, 'migrations');
     rmSync(migrations, { recursive: true, force: true });
     mkdirSync(migrations);
-    copyFileSync(new URL('../migrations/001_init.sql', import.meta.url), join(migrations, '001_init.sql'));
-    writeFileSync(join(migrations, '002_extra.sql'), 'CREATE TABLE extra (id INTEGER);');
+    const real = fileURLToPath(new URL('../migrations', import.meta.url));
+    for (const f of readdirSync(real)) copyFileSync(join(real, f), join(migrations, f));
+    const before = schemaVersion(db);
+    writeFileSync(join(migrations, '999_extra.sql'), 'CREATE TABLE extra (id INTEGER);');
     migrate(db, migrations, join(dir, 'backups'));
-    expect(schemaVersion(db)).toBe(2);
+    expect(schemaVersion(db)).toBe(999);
     const backups = readdirSync(join(dir, 'backups'));
-    expect(backups.some((f) => f.startsWith('pre-migration-v1'))).toBe(true);
+    expect(backups.some((f) => f.startsWith(`pre-migration-v${before}`))).toBe(true);
     const copy = new Database(join(dir, 'backups', backups[0]!), { readonly: true });
     expect(copy.pragma('integrity_check', { simple: true })).toBe('ok');
     copy.close();

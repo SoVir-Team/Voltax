@@ -5,16 +5,24 @@ import fastifyWebsocket from '@fastify/websocket';
 import {
   automationInputSchema,
   commandRequestSchema,
+  homeRoleOf,
+  homeScope,
+  inviteSchema,
+  memberDevicesSchema,
   pairRequestSchema,
+  parseEntityId,
   renameSchema,
   scheduleInputSchema,
   wsClientMessageSchema,
+  type ClientView,
   type HealthView,
-  type Role,
+  type HomeAction,
+  type HubEvent,
   type WsServerMessage,
 } from '@voltax/contracts';
 import type { z } from 'zod';
-import type { Auth, Client } from './auth.js';
+import type { AuditLog } from './audit.js';
+import type { Auth, Client, DeviceScope } from './auth.js';
 import type { AutomationEngine } from './automations.js';
 import type { CommandManager } from './commands.js';
 import type { EventLog } from './events.js';
@@ -29,16 +37,44 @@ export interface ApiDeps {
   events: EventLog;
   commands: CommandManager;
   auth: Auth;
+  audit: AuditLog;
   scheduler: Scheduler;
   automations: AutomationEngine;
   health: () => HealthView;
   uiDir?: string;
 }
 
+/** Every /api route declares exactly one of these; a route without one makes startup fail. */
+export type RouteGuard = { public: true } | { action: HomeAction; ws?: true };
+
+/** The only routes reachable without a client token. */
+export const PUBLIC_API_ROUTES = ['GET /api/v1/health', 'GET /api/v1/hub/identity', 'POST /api/v1/pair'] as const;
+
 const WS_AUTH_TIMEOUT_MS = 5000;
+const UNAUTH_AUDIT_INTERVAL_MS = 60_000;
+
+/** Deny-by-default: refuses to register an /api route that does not declare its permission. */
+export function assertGuarded(method: string, url: string, guard: RouteGuard | undefined): void {
+  if (!url.startsWith('/api/') || method === 'HEAD') return;
+  if (!guard) throw new Error(`route ${method} ${url} has no permission guard`);
+  if ('public' in guard && !(PUBLIC_API_ROUTES as readonly string[]).includes(`${method} ${url}`)) {
+    throw new Error(`route ${method} ${url} is not on the public allow-list`);
+  }
+}
 
 export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({ ...serverOptions, trustProxy: false });
+  const guards: Array<{ method: string; url: string; guard: RouteGuard }> = [];
+  app.decorate('routeGuards', guards);
+
+  app.addHook('onRoute', (route) => {
+    const guard = (route.config as { guard?: RouteGuard } | undefined)?.guard;
+    for (const method of [route.method].flat()) {
+      assertGuarded(method, route.url, guard);
+      if (guard && route.url.startsWith('/api/') && method !== 'HEAD') guards.push({ method, url: route.url, guard });
+    }
+  });
+
   await app.register(fastifyWebsocket);
 
   app.addHook('onSend', async (req, reply, payload) => {
@@ -52,84 +88,145 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     void reply.status(status).send({ error: status === 500 ? 'internal error' : err.message });
   });
 
-  const requireClient = (role?: Role) => async (req: FastifyRequest, reply: FastifyReply) => {
-    const header = req.headers.authorization;
-    const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
-    const client = deps.auth.authenticate(token);
-    if (!client) return reply.status(401).send({ error: 'unauthorized' });
-    if (role === 'owner' && client.role !== 'owner') return reply.status(403).send({ error: 'owner only' });
-    req.client = client;
+  // Unauthenticated attempts are audited at most once per minute per address and route, so a
+  // scanner cannot flood the audit log.
+  const lastUnauthAudit = new Map<string, number>();
+  const auditUnauthenticated = (req: FastifyRequest) => {
+    const key = `${req.ip} ${req.routeOptions.url ?? req.url}`;
+    const now = Date.now();
+    if (now - (lastUnauthAudit.get(key) ?? 0) < UNAUTH_AUDIT_INTERVAL_MS) return;
+    lastUnauthAudit.set(key, now);
+    if (lastUnauthAudit.size > 10_000) lastUnauthAudit.clear();
+    deps.audit.append({ actor: `ip:${req.ip}`, action: 'auth.failed', outcome: 'denied', target: `${req.method} ${req.routeOptions.url ?? req.url}` });
   };
-  const anyClient = { preHandler: requireClient() };
-  const ownerOnly = { preHandler: requireClient('owner') };
+
+  // One authorization point for every /api route: authenticate, then check the permission matrix.
+  app.addHook('preHandler', async (req, reply) => {
+    const guard = (req.routeOptions.config as { guard?: RouteGuard } | undefined)?.guard;
+    if (!req.url.startsWith('/api/') || !req.routeOptions.url) return; // static files, or a 404
+    if (!guard) return reply.status(403).send({ error: 'forbidden' }); // unreachable: onRoute refuses unguarded routes
+    if ('public' in guard || guard.ws) return; // the WebSocket authenticates in its first message
+    const header = req.headers.authorization;
+    const client = deps.auth.authenticate(header?.startsWith('Bearer ') ? header.slice(7) : undefined);
+    if (!client) {
+      auditUnauthenticated(req);
+      return reply.status(401).send({ error: 'unauthorized' });
+    }
+    if (!homeScope(homeRoleOf(client.role), guard.action)) {
+      deps.audit.append({ actor: `client:${client.clientId}`, action: guard.action, outcome: 'denied', target: `${req.method} ${req.routeOptions.url}`, details: { reason: 'role' } });
+      return reply.status(403).send({ error: 'not allowed for your role' });
+    }
+    req.client = client;
+    req.deviceScope = deps.auth.deviceScope(client);
+  });
+
+  const can = (action: HomeAction) => ({ config: { guard: { action } satisfies RouteGuard } });
+  const open = { config: { guard: { public: true } satisfies RouteGuard } };
+  const actor = (req: FastifyRequest) => `client:${req.client!.clientId}`;
+  const inScope = (req: FastifyRequest, deviceId: string) => allows(req.deviceScope!, deviceId);
+  const entityInScope = (req: FastifyRequest, entityId: string) => {
+    const ref = parseEntityId(entityId);
+    return !!ref && inScope(req, ref.deviceId);
+  };
+  /** Out-of-scope resources look exactly like missing ones, so members cannot enumerate devices. */
+  const deniedAsMissing = (req: FastifyRequest, reply: FastifyReply, action: HomeAction, target: string, error: string) => {
+    deps.audit.append({ actor: actor(req), action, outcome: 'denied', target, details: { reason: 'device not granted' } });
+    return reply.status(404).send({ error });
+  };
 
   // --- public ---
-  app.get('/api/v1/health', async () => deps.health());
-  app.get('/api/v1/hub/identity', async () => ({ hubId: deps.hubId, name: deps.hubName, version: deps.version }));
+  app.get('/api/v1/health', open, async () => deps.health());
+  app.get('/api/v1/hub/identity', open, async () => ({ hubId: deps.hubId, name: deps.hubName, version: deps.version }));
 
-  app.post('/api/v1/pair', async (req, reply) => {
+  app.post('/api/v1/pair', open, async (req, reply) => {
     const body = parse(pairRequestSchema, req.body, reply);
     if (!body) return;
     const result = deps.auth.pair(body.pairingCode, body.clientName, req.ip);
-    if (!result.ok) return reply.status(result.status).send({ error: result.error });
+    if (!result.ok) {
+      deps.audit.append({ actor: `ip:${req.ip}`, action: 'client.pair', outcome: 'denied', details: { status: result.status } });
+      return reply.status(result.status).send({ error: result.error });
+    }
+    deps.audit.append({ actor: `client:${result.clientId}`, action: 'client.pair', outcome: 'ok', target: result.clientId, details: { role: result.role } });
     req.log.info({ clientId: result.clientId, role: result.role }, 'client paired'); // never log code or token
     return reply.status(201).send({ clientId: result.clientId, token: result.token, role: result.role });
   });
 
   // --- clients & pairing (owner) ---
-  app.post('/api/v1/pairing-codes', ownerOnly, async (_req, reply) => reply.status(201).send(deps.auth.createPairingCode('member')));
-  app.get('/api/v1/clients', ownerOnly, async () => deps.auth.listClients());
-  app.delete<{ Params: { id: string } }>('/api/v1/clients/:id', ownerOnly, async (req, reply) => {
+  app.post('/api/v1/pairing-codes', can('client.manage'), async (req, reply) => {
+    const body = parse(inviteSchema, req.body, reply);
+    if (!body) return;
+    const created = deps.auth.createPairingCode('member', undefined, body.devices);
+    deps.audit.append({ actor: actor(req), action: 'client.invite', outcome: 'ok', details: { role: 'member', devices: body.devices } });
+    return reply.status(201).send(created);
+  });
+  app.get('/api/v1/clients', can('client.manage'), async (): Promise<ClientView[]> =>
+    deps.auth.listClients().map((c) => (c.role === 'member' ? { ...c, devices: deps.auth.memberDevices(c.clientId) } : c)),
+  );
+  app.put<{ Params: { id: string } }>('/api/v1/clients/:id/devices', can('client.manage'), async (req, reply) => {
+    const body = parse(memberDevicesSchema, req.body, reply);
+    if (!body) return;
+    const r = deps.auth.setMemberDevices(req.params.id, body.devices);
+    if (r === 'not_found') return reply.status(404).send({ error: 'client not found' });
+    if (r === 'not_member') return reply.status(409).send({ error: 'owners always have every device' });
+    deps.audit.append({ actor: actor(req), action: 'client.devices', outcome: 'ok', target: req.params.id, details: { devices: body.devices } });
+    return reply.status(204).send();
+  });
+  app.delete<{ Params: { id: string } }>('/api/v1/clients/:id', can('client.manage'), async (req, reply) => {
     const r = deps.auth.revoke(req.params.id);
     if (r === 'not_found') return reply.status(404).send({ error: 'client not found' });
     if (r === 'last_owner') return reply.status(409).send({ error: 'cannot revoke the last owner' });
+    deps.audit.append({ actor: actor(req), action: 'client.revoke', outcome: 'ok', target: req.params.id });
     return reply.status(204).send();
   });
 
   // --- devices & commands ---
-  app.get('/api/v1/devices', anyClient, async () => deps.store.listDevices());
-  app.delete<{ Params: { id: string } }>('/api/v1/devices/:id', ownerOnly, async (req, reply) =>
-    deps.store.deleteDevice(req.params.id) ? reply.status(204).send() : reply.status(404).send({ error: 'device not found' }),
-  );
+  app.get('/api/v1/devices', can('device.read'), async (req) => deps.store.listDevices().filter((d) => inScope(req, d.deviceId)));
+  app.delete<{ Params: { id: string } }>('/api/v1/devices/:id', can('device.manage'), async (req, reply) => {
+    if (!deps.store.deleteDevice(req.params.id)) return reply.status(404).send({ error: 'device not found' });
+    deps.audit.append({ actor: actor(req), action: 'device.remove', outcome: 'ok', target: req.params.id });
+    return reply.status(204).send();
+  });
 
-  app.patch<{ Params: { id: string } }>('/api/v1/devices/:id', ownerOnly, async (req, reply) => {
+  app.patch<{ Params: { id: string } }>('/api/v1/devices/:id', can('device.manage'), async (req, reply) => {
     const body = parse(renameSchema, req.body, reply);
     if (!body) return;
     return deps.store.renameDevice(req.params.id, body.name) ? reply.status(204).send() : reply.status(404).send({ error: 'device not found' });
   });
-  app.patch<{ Params: { id: string } }>('/api/v1/entities/:id', ownerOnly, async (req, reply) => {
+  app.patch<{ Params: { id: string } }>('/api/v1/entities/:id', can('device.manage'), async (req, reply) => {
     const body = parse(renameSchema, req.body, reply);
     if (!body) return;
     return deps.store.renameEntity(req.params.id, body.name) ? reply.status(204).send() : reply.status(404).send({ error: 'entity not found' });
   });
 
-  app.post<{ Params: { id: string } }>('/api/v1/entities/:id/commands', anyClient, async (req, reply) => {
+  app.post<{ Params: { id: string } }>('/api/v1/entities/:id/commands', can('device.command'), async (req, reply) => {
     const body = parse(commandRequestSchema, req.body, reply);
     if (!body) return;
+    if (!entityInScope(req, req.params.id)) return deniedAsMissing(req, reply, 'device.command', req.params.id, 'unknown entity');
     const result = deps.commands.submit({ ...body, entityId: req.params.id, source: 'local' });
     if ('error' in result) return reply.status(result.status).send({ error: result.error });
     return reply.status(result.status).send(result.command);
   });
 
-  app.get<{ Params: { id: string } }>('/api/v1/commands/:id', anyClient, async (req, reply) => {
+  app.get<{ Params: { id: string } }>('/api/v1/commands/:id', can('device.read'), async (req, reply) => {
     const cmd = deps.commands.get(req.params.id);
+    if (cmd && !entityInScope(req, cmd.entityId)) return deniedAsMissing(req, reply, 'device.read', req.params.id, 'command not found');
     return cmd ?? reply.status(404).send({ error: 'command not found' });
   });
 
-  app.get<{ Querystring: { afterSeq?: string; limit?: string } }>('/api/v1/events', anyClient, async (req) => {
+  app.get<{ Querystring: { afterSeq?: string; limit?: string } }>('/api/v1/events', can('events.read'), async (req) => {
     const afterSeq = Math.max(0, Number(req.query.afterSeq ?? 0) || 0);
     const limit = Math.min(1000, Math.max(1, Number(req.query.limit ?? 500) || 500));
-    return deps.events.since(afterSeq, limit);
+    return deps.events.since(afterSeq, limit).filter((e) => eventVisible(req.deviceScope!, e));
   });
 
-  // --- schedules (owner) ---
-  app.get('/api/v1/schedules', anyClient, async () => deps.scheduler.list());
-  app.post('/api/v1/schedules', ownerOnly, async (req, reply) => {
+  // --- schedules (owner manages; members see rules on their devices) ---
+  app.get('/api/v1/schedules', can('schedule.read'), async (req) => deps.scheduler.list().filter((s) => entityInScope(req, s.entityId)));
+  app.post('/api/v1/schedules', can('schedule.manage'), async (req, reply) => {
     const body = parse(scheduleInputSchema, req.body, reply);
     if (!body) return;
     return scheduleErrors(reply, () => reply.status(201).send(deps.scheduler.create(body)));
   });
-  app.put<{ Params: { id: string } }>('/api/v1/schedules/:id', ownerOnly, async (req, reply) => {
+  app.put<{ Params: { id: string } }>('/api/v1/schedules/:id', can('schedule.manage'), async (req, reply) => {
     const body = parse(scheduleInputSchema, req.body, reply);
     if (!body) return;
     return scheduleErrors(reply, () => {
@@ -137,28 +234,36 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
       return s ?? reply.status(404).send({ error: 'schedule not found' });
     });
   });
-  app.delete<{ Params: { id: string } }>('/api/v1/schedules/:id', ownerOnly, async (req, reply) =>
+  app.delete<{ Params: { id: string } }>('/api/v1/schedules/:id', can('schedule.manage'), async (req, reply) =>
     deps.scheduler.delete(req.params.id) ? reply.status(204).send() : reply.status(404).send({ error: 'schedule not found' }),
   );
 
-  // --- automations (owner) ---
-  app.get('/api/v1/automations', anyClient, async () => deps.automations.list());
-  app.post('/api/v1/automations', ownerOnly, async (req, reply) => {
+  // --- automations (owner manages; members see rules on their devices) ---
+  app.get('/api/v1/automations', can('automation.read'), async (req) =>
+    deps.automations.list().filter((a) => entityInScope(req, a.trigger.entityId) && entityInScope(req, a.action.entityId)),
+  );
+  app.post('/api/v1/automations', can('automation.manage'), async (req, reply) => {
     const body = parse(automationInputSchema, req.body, reply);
     if (!body) return;
     return reply.status(201).send(deps.automations.create(body));
   });
-  app.put<{ Params: { id: string } }>('/api/v1/automations/:id', ownerOnly, async (req, reply) => {
+  app.put<{ Params: { id: string } }>('/api/v1/automations/:id', can('automation.manage'), async (req, reply) => {
     const body = parse(automationInputSchema, req.body, reply);
     if (!body) return;
     return deps.automations.update(req.params.id, body) ?? reply.status(404).send({ error: 'automation not found' });
   });
-  app.delete<{ Params: { id: string } }>('/api/v1/automations/:id', ownerOnly, async (req, reply) =>
+  app.delete<{ Params: { id: string } }>('/api/v1/automations/:id', can('automation.manage'), async (req, reply) =>
     deps.automations.delete(req.params.id) ? reply.status(204).send() : reply.status(404).send({ error: 'automation not found' }),
   );
 
+  // --- audit (owner) ---
+  app.get<{ Querystring: { afterSeq?: string } }>('/api/v1/audit', can('audit.read'), async (req) => ({
+    records: deps.audit.since(Math.max(0, Number(req.query.afterSeq ?? 0) || 0)),
+    verify: deps.audit.verify(),
+  }));
+
   // --- live events: first message must be {type:'auth', token, resumeAfterSeq?} ---
-  app.get('/api/v1/ws', { websocket: true }, (socket) => {
+  app.get('/api/v1/ws', { websocket: true, config: { guard: { action: 'events.read', ws: true } satisfies RouteGuard } }, (socket, req) => {
     const send = (msg: WsServerMessage) => socket.send(JSON.stringify(msg));
     let cleanup: Array<() => void> = [];
     const authTimer = setTimeout(() => socket.close(4401, 'auth timeout'), WS_AUTH_TIMEOUT_MS);
@@ -173,15 +278,18 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
       }
       const parsed = wsClientMessageSchema.safeParse(msg);
       const client = parsed.success ? deps.auth.authenticate(parsed.data.token) : null;
-      if (!parsed.success || !client) {
+      if (!parsed.success || !client || !homeScope(homeRoleOf(client.role), 'events.read')) {
+        auditUnauthenticated(req);
         send({ type: 'error', error: 'unauthorized' });
         socket.close(4401, 'unauthorized');
         return;
       }
+      // The scope is re-read for every event, so a change to a member's devices applies at once.
+      const visible = (event: HubEvent) => eventVisible(deps.auth.deviceScope(client), event);
       // Replay then subscribe in the same tick: SQLite calls are synchronous, so no event can slip between.
       let lastSent = parsed.data.resumeAfterSeq ?? deps.events.lastSeq();
       for (const event of deps.events.since(lastSent)) {
-        send({ type: 'event', event });
+        if (visible(event)) send({ type: 'event', event });
         lastSent = event.seq;
       }
       send({ type: 'ready', lastSeq: lastSent });
@@ -189,7 +297,7 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
         deps.events.subscribe((event) => {
           if (event.seq > lastSent) {
             lastSent = event.seq;
-            send({ type: 'event', event });
+            if (visible(event)) send({ type: 'event', event });
           }
         }),
         deps.auth.onRevoke((id) => {
@@ -212,6 +320,19 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
   return app;
 }
 
+function allows(scope: DeviceScope, deviceId: string): boolean {
+  return scope === 'all' || scope.has(deviceId);
+}
+
+/** Events about a device are only shown to clients that may see that device; hub-wide events to all. */
+export function eventVisible(scope: DeviceScope, event: HubEvent): boolean {
+  if (scope === 'all') return true;
+  const p = event.payload;
+  const deviceId = typeof p.deviceId === 'string' ? p.deviceId : typeof p.entityId === 'string' ? parseEntityId(p.entityId)?.deviceId : undefined;
+  if (deviceId !== undefined) return scope.has(deviceId);
+  return typeof p.entityId !== 'string'; // an unparseable entity id is hidden, not shown
+}
+
 function parse<T extends z.ZodType>(schema: T, body: unknown, reply: FastifyReply): z.infer<T> | null {
   const r = schema.safeParse(body);
   if (r.success) return r.data;
@@ -231,5 +352,9 @@ function scheduleErrors<T>(reply: FastifyReply, fn: () => T): T | FastifyReply {
 declare module 'fastify' {
   interface FastifyRequest {
     client?: Client;
+    deviceScope?: DeviceScope;
+  }
+  interface FastifyInstance {
+    routeGuards: Array<{ method: string; url: string; guard: RouteGuard }>;
   }
 }

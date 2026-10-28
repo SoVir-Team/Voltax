@@ -79,7 +79,7 @@ describe('automations (run on the hub, no cloud)', () => {
   });
 
   it('requires an owner to manage automations', async () => {
-    const invite = (await env.hub.app.inject({ method: 'POST', url: '/api/v1/pairing-codes', headers: owner })).json<{ code: string }>();
+    const invite = (await env.hub.app.inject({ method: 'POST', url: '/api/v1/pairing-codes', headers: owner, payload: { devices: '*' } })).json<{ code: string }>();
     const member = (
       await env.hub.app.inject({ method: 'POST', url: '/api/v1/pair', payload: { pairingCode: invite.code, clientName: 'kid' } })
     ).json<{ token: string }>();
