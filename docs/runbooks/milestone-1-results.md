@@ -37,6 +37,16 @@ WAN cable is unplugged and `ping -c2 1.1.1.1` fails on the Pi.
 | `deploy/pi/tests/tls-test.sh` against the hub on 127.0.0.1:18443 | 6/6 pass |
 | Web app against the dev hub with simulated devices: pairing, live state, commands confirmed, schedules, offline app shell | pass (browser) |
 
+## Scripted checks on the Pi (§6.2, §6.4)
+
+| Script | Result |
+|---|---|
+| `deploy/pi/tests/perm-test.sh` | NOT YET RUN |
+| `deploy/pi/tests/mqtt-acl-test.sh` | NOT YET RUN |
+| `deploy/pi/tests/recovery-test.sh` | NOT YET RUN |
+| `deploy/pi/tests/backup-restore-test.sh` | NOT YET RUN (test hub only) |
+| `deploy/pi/tests/tls-test.sh` (from a LAN PC to the Pi) | NOT YET RUN on a Pi (6/6 on PC) |
+
 ## Output
 
 <!-- Paste command output for each test here, newest first, with date and hub ID. -->

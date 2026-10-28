@@ -89,9 +89,13 @@ install_release() { # $1 version, $2 optional source dir
   [[ "$hub_img" == *@sha256:* && "$mq_img" == *@sha256:* ]] || die "images must be pinned by digest"
 
   log "pulling images"
-  if [ -f "$VOLTAX_ETC/github.token" ]; then docker login ghcr.io -u voltax-hub --password-stdin <"$VOLTAX_ETC/github.token" >/dev/null; fi
-  docker pull -q "$hub_img" >/dev/null
-  docker pull -q "$mq_img" >/dev/null
+  # Already present (pinned by digest, e.g. via `docker load` on a hub without internet): no pull needed.
+  local img missing=()
+  for img in "$hub_img" "$mq_img"; do docker image inspect "$img" >/dev/null 2>&1 || missing+=("$img"); done
+  if [ ${#missing[@]} -gt 0 ] && [ -f "$VOLTAX_ETC/github.token" ]; then
+    docker login ghcr.io -u voltax-hub --password-stdin <"$VOLTAX_ETC/github.token" >/dev/null
+  fi
+  for img in "${missing[@]}"; do docker pull -q "$img" >/dev/null || die "cannot pull $img"; done
 
   new=$RELEASES/$ver
   prev=$(readlink -f "$VOLTAX_OPT/current" 2>/dev/null || true)

@@ -1,0 +1,134 @@
+# Signed hub release. Push a tag `hub-v<version>` (e.g. hub-v0.1.0) on a commit that passed CI.
+#
+# Produces GitHub release "hub-v<version>" with the three files voltax-update installs:
+#   release.json          version + images pinned by digest + sha256 of compose.yaml
+#   release.json.minisig  minisign signature, checked on every Pi against /etc/voltax/release.pub
+#   compose.yaml          deploy/pi/compose.yaml
+#
+# Required repository secrets (see deploy/pi/keys/README.md):
+#   MINISIGN_SECRET_KEY   contents of voltax-release.key
+#   MINISIGN_PASSWORD     its password (leave unset only if the key was made with `minisign -G -W`)
+name: Hub release
+
+on:
+  push:
+    tags: ['hub-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hub-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  MOSQUITTO_TAG: eclipse-mosquitto:2.0
+
+jobs:
+  verify:
+    name: Typecheck and test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  release:
+    name: Build, sign, publish
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create the GitHub release
+      packages: write # push the image to GHCR
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from tag
+        id: meta
+        run: |
+          version=${GITHUB_REF_NAME#hub-v}
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::tag must look like hub-v1.2.3"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/voltax-hub" >> "$GITHUB_OUTPUT"
+
+      - name: Check signing setup before building
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          [ -n "$MINISIGN_SECRET_KEY" ] || { echo "::error::repository secret MINISIGN_SECRET_KEY is not set (deploy/pi/keys/README.md)"; exit 1; }
+          [ -s deploy/pi/keys/voltax-release.pub ] || { echo "::error::deploy/pi/keys/voltax-release.pub is missing"; exit 1; }
+          sudo apt-get update -q && sudo apt-get install -y -q minisign
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push hub image (linux/arm64)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/hub/Dockerfile
+          platforms: linux/arm64
+          push: true
+          build-args: VOLTAX_VERSION=${{ steps.meta.outputs.version }}
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Write release.json
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          HUB_IMAGE: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          mq_digest=$(docker buildx imagetools inspect "$MOSQUITTO_TAG" --format '{{json .Manifest}}' | jq -r .digest)
+          [[ "$mq_digest" == sha256:* && "$HUB_IMAGE" == *@sha256:* ]] || { echo "::error::could not resolve image digests"; exit 1; }
+          jq -n \
+            --arg version "$VERSION" \
+            --arg hubImage "$HUB_IMAGE" \
+            --arg mosquittoImage "${MOSQUITTO_TAG%%:*}@$mq_digest" \
+            --arg composeSha256 "$(sha256sum deploy/pi/compose.yaml | cut -d' ' -f1)" \
+            --arg commit "$GITHUB_SHA" \
+            --arg builtAt "$(date -u +%FT%TZ)" \
+            '{version: $version, hubImage: $hubImage, mosquittoImage: $mosquittoImage, composeSha256: $composeSha256, commit: $commit, builtAt: $builtAt}' \
+            > release.json
+          cat release.json
+
+      - name: Sign release.json and verify against the committed public key
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          umask 077
+          key=$(mktemp)
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s "$key" -m release.json -x release.json.minisig -t "voltax hub $VERSION"
+          # Same check every Pi runs: proves the secret key matches deploy/pi/keys/voltax-release.pub.
+          minisign -V -p deploy/pi/keys/voltax-release.pub -m release.json -x release.json.minisig
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          cp deploy/pi/compose.yaml compose.yaml
+          gh release create "$GITHUB_REF_NAME" release.json release.json.minisig compose.yaml \
+            --title "Hub $VERSION" \
+            --notes "Install on a hub: \`sudo voltax-update $VERSION\`. Images are pinned by digest in release.json."

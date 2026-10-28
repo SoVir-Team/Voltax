@@ -13,15 +13,16 @@ A GitHub release tagged `hub-v<version>` with three files:
 The Pi refuses any release whose signature does not verify against `/etc/voltax/release.pub`
 (installed from `deploy/pi/keys/voltax-release.pub`).
 
-> **Not built yet:** the release workflow (`.github/workflows/hub-release.yml`) and the release key.
-> **[MANUAL]** Create the key once, offline: `minisign -G -p voltax-release.pub -s voltax-release.key`.
-> Commit only the `.pub` file to `deploy/pi/keys/`; keep the secret key out of the repo.
+Releases are built by `.github/workflows/hub-release.yml` when a `hub-v<version>` tag is pushed.
+> **[MANUAL] Not done yet:** create the release signing key and its GitHub secrets, following
+> [deploy/pi/keys/README.md](../../deploy/pi/keys/README.md). Until then the workflow stops at its
+> first step, and hubs refuse every release.
 
 ## Install or update
 
 ```bash
 sudo voltax-update 0.1.1                    # from GitHub (needs /etc/voltax/github.token, read-only)
-sudo voltax-update 0.1.1 --from-dir /tmp/r  # from copied release files (no internet needed)
+sudo voltax-update 0.1.1 --from-dir /tmp/r  # from copied release files; images already loaded = no internet needed
 ```
 
 In order, it:
