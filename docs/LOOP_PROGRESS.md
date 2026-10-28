@@ -116,11 +116,66 @@ regenerated with npm 10.9.4 (`npx npm@10.9.4 install --package-lock-only`), then
 
 ## P5. Cloud grants, audit, notifications
 
-- [ ] Audit chain, checkpoints, verify, append-only triggers (`test:pg`)
-- [ ] Grant service + command signer
-- [ ] Notifications: in-app, Web Push, SMTP; failure scenarios; Mailpit check
-- [ ] Audit export to S3 (MinIO check)
-- [ ] End-to-end cloud + hub lifecycle test; `test:brokers` (Mosquitto + EMQX)
+- [x] Audit chain, checkpoints, verify, append-only triggers, DB roles (`test:pg`)
+- [x] Grant service + command signer (cloud mirror of hub grants, checks before signing, sweeps)
+- [x] Notifications: in-app, Web Push, SMTP; failure scenarios; real SMTP check (Mailpit)
+- [x] Audit export to S3 with Object Lock; offline `verify-export` (real S3-compatible server; see note on MinIO)
+- [x] End-to-end cloud + hub lifecycle test; `test:brokers` (native Mosquitto + EMQX container)
+- [x] Config/startup wiring for broker, broker-auth API, SMTP, VAPID, S3, audit key; CLI (`migrate`, `audit-verify`, `audit-export`, `audit-bucket-create`, `verify-export`, `gen-audit-key`, `gen-vapid-keys`)
+- [x] Docs: [security/audit-threat-model.md](security/audit-threat-model.md), [security/data-classification.md](security/data-classification.md); retention sweep for sessions and setup links
+
+Evidence (P5), 2026-10-28 16:12:
+- `npm test` → contracts 15, hub 86, cloud 243 passed + 11 skipped (the skipped ones need real
+  PostgreSQL or Docker services and run in the suites below), web 10. `npm run typecheck` clean,
+  `npm run build` clean, `npm audit --omit=dev` → 0 vulnerabilities.
+- `npm run test:pg` (throwaway PostgreSQL **18.6** cluster: temp dir, own port, 127.0.0.1, trust,
+  deleted afterwards) → 11 files, **250 passed**, 4 skipped (Docker-only). Includes
+  `pg-roles.test.ts`: the app role can append but cannot UPDATE/DELETE/TRUNCATE or disable
+  triggers on `audit_log`, `hub_audit`, `audit_checkpoints`; even the owner hits the triggers; the
+  reader role reads audit tables only; 200 concurrent appends over 12 connections keep one chain;
+  the whole cloud runs as `voltax_app` with migrations off. `cli.test.ts` on PG: `migrate` refused
+  for the app role and applied as owner, `bootstrap-admin` once only, `audit-verify` ok.
+- Race found by `test:pg` and fixed: a grant could read as ended while its waiting commands were
+  still `sent`. Status change and failing of waiting commands are now one transaction with the
+  grant row locked (`FOR UPDATE`), so a sweep and a hub message cannot end a grant twice.
+- `npm run test:brokers` → **PASS mosquitto, PASS emqx** (9/9 each), plus 9/9 on the in-process
+  broker in `npm test`. `e2e.test.ts` uses the real cloud and the real hub; only the ESP32 is
+  simulated. Covered: telemetry with ids/online flags only; request pending on the hub, nothing
+  works before approval; owner approves on the hub; command executes on the device; diagnostics
+  contain no states; owner revokes with one command in flight and one queued (queued fails
+  `grant revoked`, in-flight reported); a correctly signed envelope for a revoked grant is refused
+  by the hub; hub audit copy intact in the cloud; a neighbour hub's credential receives nothing
+  for another hub and cannot fake its status; wrong passwords refused.
+  - Mosquitto: native `mosquitto.exe` 2.x as separate processes on free ports with generated config,
+    `mosquitto_passwd`-hashed users and ACL files. The cloud broker uses an ACL equivalent of
+    `brokerAllows`; the hub's **local** broker uses `deploy/pi/mosquitto/acl.template` rendered
+    for the test hub, and the simulated ESP32 logs in with its own credential. The Mosquitto Windows
+    service was not touched. Mosquitto accepts a SUBSCRIBE to a forbidden topic and enforces read
+    access per message; the test asserts that nothing is delivered.
+  - EMQX `emqx/emqx:5.8.6` in Docker with HTTP authentication and authorisation against the cloud's
+    internal API (`/broker/authn`, `/broker/authz`, shared-secret header), `no_match = deny`.
+- `npm run test:services` → 4/4: owner start notice delivered through real SMTP (Mailpit
+  `axllent/mailpit:v1.27`) and read back from its API, then control allowed; a recipient refused
+  with 550 fails permanently and control stays blocked; an SMTP server that never answers times
+  out (new bounded SMTP timeouts) and stays pending, control blocked; audit export to an
+  S3-compatible server with Object Lock: COMPLIANCE retention set, deleting the locked version →
+  403, the locked version still reads back after a delete marker, chain and checkpoint verify, the
+  next export links to the previous one.
+  - **MinIO note:** MinIO no longer publishes images (`docker pull minio/minio` and `quay.io/minio`
+    both refused), so the S3 check uses Versity Gateway `versity/versitygw:v1.10.0` (Apache-2.0,
+    S3 API with versioning and Object Lock). The production bucket stays Blocked on your account.
+- New unit tests: `config.test.ts` (4: pairs required together, errors never echo secret values,
+  broker-auth API needs a 32+ character secret); `cli.test.ts` (built CLI: signing keys
+  private-only and never overwritten, VAPID keys, `verify-export` passes an intact copy and fails
+  an edited record or a wrong public key); `homes.test.ts` the cloud service broker name cannot be
+  a hub id; `auth.test.ts` retention sweep deletes ended sessions and used/expired setup links.
+- Per-file cloud counts: authz-matrix 153, auth 18, grants 16, homes 12, audit-extras 11,
+  notifications 9, e2e 9, crypto 7, pg-roles 6, cli 5, config 4, services 4.
+
+Not verified here (needs your accounts or production hosting, see production gate): a real email
+provider, a real S3 bucket and credential policy, real browser push delivery through
+Google/Mozilla/Apple push services (encryption and VAPID are checked by decrypting the payload in
+`audit-extras.test.ts`), EMQX with TLS on the public internet.
 
 ## P6. Fleet
 
@@ -157,7 +212,7 @@ regenerated with npm 10.9.4 (`npx npm@10.9.4 install --package-lock-only`), then
 
 | Workflow | Status | Used for |
 |---|---|---|
-| superpowers | used | test-driven development, verification before completion |
+| superpowers | used | test-driven development, verification before completion, systematic debugging (P5 grant race on real PostgreSQL) |
 | ponytail | used | smallest complete change |
 | ECC (`D:\workspace\repos\ecc`) | planned | `security-reviewer`, `tdd-guide`, `database-reviewer` checklists |
 | Agentic Awesome Skills | planned | `auth-implementation-patterns`, `audit-logging`, `api-security-testing` |
