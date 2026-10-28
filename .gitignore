@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+# secrets: never commit
+.secrets/
+*.env
+.env*
+!*.env.example
+secrets.yaml
+*.pem
+*.key
+
+# local tooling state
+.claude/*.local.md
+.esphome/
+firmware/esphome/.esphome/
