@@ -33,8 +33,9 @@ export class FakeDevice {
   ignoreCommands = false;
   received: Array<{ topic: string; payload: string; retain: boolean }> = [];
 
-  async connect(url: string): Promise<void> {
+  async connect(url: string, auth?: { username: string; password: string }): Promise<void> {
     this.client = await mqtt.connectAsync(url, {
+      ...auth,
       clientId: 'esp-relay-01',
       clean: true,
       will: { topic: `${PREFIX}/status`, payload: Buffer.from('offline'), qos: 1, retain: true },
@@ -77,10 +78,18 @@ export interface TestEnv {
   close: () => Promise<void>;
 }
 
+/** A real local broker (e.g. Mosquitto with the deploy/pi ACL) used instead of the in-process one. */
+export interface LocalBroker {
+  url: string;
+  close: () => Promise<void>;
+  hubPassword: string;
+  device: { username: string; password: string };
+}
+
 export async function startEnv(
-  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean; cloudUrl?: string; cloudPassword?: string } = {},
+  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean; cloudUrl?: string; cloudPassword?: string; localBroker?: LocalBroker } = {},
 ): Promise<TestEnv> {
-  const broker = await startBroker();
+  const broker = opts.localBroker ?? (await startBroker());
   const dir = opts.dir ?? mkdtempSync(join(tmpdir(), 'voltax-hub-'));
   const syncFile = join(dir, 'time-synced');
   if (opts.timeSynced) writeFileSync(syncFile, '');
@@ -92,7 +101,7 @@ export async function startEnv(
       BACKUP_DIR: join(dir, 'backups'),
       MQTT_URL: broker.url,
       MQTT_USERNAME: 'hub',
-      MQTT_PASSWORD: 'x',
+      MQTT_PASSWORD: opts.localBroker?.hubPassword ?? 'x',
       TZ: 'UTC',
       VOLTAX_VERSION: 'test',
       TIME_SYNC_FILE: syncFile,
@@ -107,7 +116,7 @@ export async function startEnv(
 
   const device = new FakeDevice();
   if (opts.connectDevice !== false) {
-    await device.connect(broker.url);
+    await device.connect(broker.url, opts.localBroker?.device);
     await waitFor(() => hub.store.getEntity(RELAY) !== null && hub.store.isDeviceOnline('esp-relay-01'));
   }
 

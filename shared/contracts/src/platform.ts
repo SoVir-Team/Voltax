@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { hubIdSchema, type Telemetry } from './cloud.js';
-import { PLATFORM_ROLES, type PlatformRole } from './permissions.js';
+import { entityIdSchema } from './api.js';
+import { deviceIdSchema, hubIdSchema, type GrantStatus, type Telemetry } from './cloud.js';
+import { GRANT_ACTIONS, PLATFORM_ROLES, type GrantAction, type PlatformRole } from './permissions.js';
 
 // Company portal API (backend/cloud <-> frontend/admin). Operational metadata only.
 
@@ -105,3 +106,70 @@ export interface AuditRecordView {
   prevHash: string;
   hash: string;
 }
+
+// --- support access (cloud side) -----------------------------------------------------------------
+
+export const grantCreateSchema = z
+  .object({
+    deviceIds: z.array(deviceIdSchema).min(1).max(50),
+    actions: z.array(z.enum(GRANT_ACTIONS)).min(1),
+    reason: z.string().trim().min(10, 'say why (at least 10 characters)').max(500),
+    ticketRef: z.string().trim().min(1).max(64).optional(),
+    startsAt: z.number().int().positive().optional(),
+    durationMinutes: z.number().int().min(5).max(240),
+  })
+  .refine((g) => new Set(g.actions).size === g.actions.length && new Set(g.deviceIds).size === g.deviceIds.length, 'duplicate actions or devices');
+export const grantRevokeSchema = z.object({ reason: z.string().trim().min(1).max(500), outcome: z.enum(['revoked', 'completed']).default('revoked') });
+export const grantCommandSchema = z.object({ entityId: entityIdSchema, value: z.boolean() });
+export const activityRequestSchema = z.object({ sinceMinutes: z.number().int().min(1).max(7 * 24 * 60) });
+
+export interface CloudGrantView {
+  grantId: string;
+  homeId: string;
+  hubId: string;
+  staff: { staffId: string; role: PlatformRole; displayName: string };
+  deviceIds: string[];
+  actions: GrantAction[];
+  reason: string;
+  ticketRef: string | null;
+  startsAt: number;
+  endsAt: number;
+  status: GrantStatus;
+  requestedAt: number;
+  startNoticeAt: number | null;
+  /** Every owner start notice delivered: required (fail-closed) before control actions. */
+  ownerNotified: boolean;
+  endedAt: number | null;
+  endReason: string | null;
+}
+
+export interface GrantCommandView {
+  commandId: string;
+  grantId: string;
+  entityId: string;
+  value: boolean;
+  status: string;
+  reason: string | null;
+  requestedAt: number;
+  updatedAt: number;
+}
+
+export interface NotificationView {
+  id: string;
+  grantId: string;
+  kind: 'support.started' | 'support.ended';
+  channel: 'in_app' | 'email';
+  status: 'pending' | 'delivered' | 'failed' | 'cancelled';
+  attempts: number;
+  lastError: string | null;
+  createdAt: number;
+  deliveredAt: number | null;
+}
+
+// --- Web Push (staff portal) ---------------------------------------------------------------------
+
+export const pushSubscriptionSchema = z.object({
+  endpoint: z.url({ protocol: /^https$/ }).max(1000),
+  keys: z.object({ p256dh: z.string().regex(/^[A-Za-z0-9_-]{80,100}$/), auth: z.string().regex(/^[A-Za-z0-9_-]{16,32}$/) }),
+});
+export type PushSubscriptionInput = z.infer<typeof pushSubscriptionSchema>;

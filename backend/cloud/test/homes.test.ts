@@ -87,6 +87,11 @@ describe('hubs', () => {
     expect((await c.req('POST', `/api/v1/homes/${a}/hub`, { cookie: admin.cookie, body: { hubId: 'BAD ID' } })).status).toBe(400);
   });
 
+  it('the cloud service broker name is reserved and cannot be a hub id', async () => {
+    const res = await c.req('POST', `/api/v1/homes/${await c.addHome()}/hub`, { cookie: admin.cookie, body: { hubId: 'voltax-cloud-service' } });
+    expect(res.status).toBe(400);
+  });
+
   it('device list exposes only ids and online flags from telemetry, never device state', async () => {
     const home = await c.addHome();
     await c.homes.registerHub(home, 'hub-devices', admin.staffId);
@@ -126,7 +131,8 @@ describe('audit chain', () => {
     const res = await c.req('POST', '/api/v1/audit/verify', { cookie: admin.cookie });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.count).toBeGreaterThan(10);
+    expect(res.body.chain.count).toBeGreaterThan(10);
+    expect(res.body.problems).toEqual([]);
   });
 
   it('detects an edit made by someone who bypasses the triggers (database owner)', async () => {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AssignmentView, HomeView, PlatformRole, Telemetry } from '@voltax/contracts';
 import type { CloudAudit } from './audit.js';
+import { CLOUD_SERVICE_USER } from './broker.js';
 import { newToken, safeEqualHex, sha256 } from './crypto.js';
 import type { Db } from './db.js';
 import { badRequest, conflict, notFound } from './errors.js';
@@ -97,6 +98,7 @@ export class HomesService {
    * the same hub id. The password is returned once and stored only as a hash.
    */
   async registerHub(homeId: string, hubId: string, by: string): Promise<{ hubId: string; brokerUsername: string; brokerPassword: string; rotated: boolean }> {
+    if (hubId === CLOUD_SERVICE_USER) throw badRequest('this hub id is reserved');
     const home = await this.row(homeId);
     if (home.hub_id && home.hub_id !== hubId) throw conflict('this home already has a different hub registered');
     const [taken] = await this.db.query<{ home_id: string }>('SELECT home_id FROM hubs WHERE hub_id = $1', [hubId]);
@@ -137,6 +139,11 @@ export class HomesService {
   async homeOfHub(hubId: string): Promise<string | null> {
     const [row] = await this.db.query<{ home_id: string }>('SELECT home_id FROM hubs WHERE hub_id = $1', [hubId]);
     return row?.home_id ?? null;
+  }
+
+  /** Stores the latest telemetry (already validated against the strict allow-list schema). */
+  async recordTelemetry(hubId: string, telemetry: Telemetry): Promise<void> {
+    await this.db.query('UPDATE hubs SET telemetry = $2, last_seen_at = $3 WHERE hub_id = $1', [hubId, JSON.stringify(telemetry), Date.now()]);
   }
 
   /** Device ids and online flags only, from the hub's allow-listed telemetry. */

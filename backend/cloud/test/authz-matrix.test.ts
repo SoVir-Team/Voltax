@@ -12,7 +12,8 @@ let homeA: string; // assigned to the support and installer accounts
 let homeB: string; // assigned to nobody under test
 const staffByRole = {} as Record<PlatformRole, TestStaff>;
 
-type Build = (homeId: string) => Promise<{ url: string; body?: unknown }>;
+type Build = (homeId: string, staff: TestStaff) => Promise<{ url: string; body?: unknown }>;
+const grantUrl = async (h: string, staff: TestStaff, suffix = '') => `/api/v1/homes/${h}/grants/${await c.activeGrant(h, staff)}${suffix}`;
 
 const freshStaff = async (role: PlatformRole = 'INSTALLER') =>
   (await c.staff.create({ email: `t-${randomUUID().slice(0, 8)}@voltex.test`, displayName: 'Target', role }, 'cli')).staff.staffId;
@@ -36,14 +37,30 @@ const ROUTES: Record<string, Build> = {
   'GET /api/v1/homes/:homeId/devices': async (h) => ({ url: `/api/v1/homes/${h}/devices` }),
   'GET /api/v1/audit': async () => ({ url: '/api/v1/audit' }),
   'POST /api/v1/audit/verify': async () => ({ url: '/api/v1/audit/verify' }),
+  'GET /api/v1/audit/checkpoints': async () => ({ url: '/api/v1/audit/checkpoints' }),
+  'GET /api/v1/homes/:homeId/hub/audit': async (h) => ({ url: `/api/v1/homes/${h}/hub/audit` }),
+  'GET /api/v1/grants': async () => ({ url: '/api/v1/grants' }),
+  'POST /api/v1/homes/:homeId/grants': async (h, s) => {
+    await c.db.query("UPDATE grants SET status = 'revoked' WHERE home_id = $1 AND staff_id = $2 AND status IN ('pending', 'active')", [h, s.staffId]);
+    return { url: `/api/v1/homes/${h}/grants`, body: { deviceIds: ['kitchen'], actions: ['diagnostics.read'], reason: 'customer reported the hub is slow', durationMinutes: 30 } };
+  },
+  'GET /api/v1/homes/:homeId/grants': async (h) => ({ url: `/api/v1/homes/${h}/grants` }),
+  'GET /api/v1/homes/:homeId/grants/:grantId': async (h, s) => ({ url: await grantUrl(h, s) }),
+  'GET /api/v1/homes/:homeId/grants/:grantId/notifications': async (h, s) => ({ url: await grantUrl(h, s, '/notifications') }),
+  'POST /api/v1/homes/:homeId/grants/:grantId/revoke': async (h, s) => ({ url: await grantUrl(h, s, '/revoke'), body: { reason: 'work finished' } }),
+  'POST /api/v1/homes/:homeId/grants/:grantId/commands': async (h, s) => ({ url: await grantUrl(h, s, '/commands'), body: { entityId: 'kitchen.switch.relay', value: true } }),
+  'GET /api/v1/homes/:homeId/grants/:grantId/commands': async (h, s) => ({ url: await grantUrl(h, s, '/commands') }),
+  'POST /api/v1/homes/:homeId/grants/:grantId/diagnostics': async (h, s) => ({ url: await grantUrl(h, s, '/diagnostics') }),
+  'POST /api/v1/homes/:homeId/grants/:grantId/activity': async (h, s) => ({ url: await grantUrl(h, s, '/activity'), body: { sinceMinutes: 60 } }),
+  'POST /api/v1/homes/:homeId/grants/:grantId/restart': async (h, s) => ({ url: await grantUrl(h, s, '/restart') }),
 };
 
 beforeAll(async () => {
   c = await startCloud();
   homeA = await c.addHome('Assigned home');
   homeB = await c.addHome('Other home');
-  await c.homes.registerHub(homeA, 'hub-assigned', randomUUID());
-  await c.homes.registerHub(homeB, 'hub-other', randomUUID());
+  await c.addHub(homeA, 'hub-assigned');
+  await c.addHub(homeB, 'hub-other');
   for (const role of PLATFORM_ROLES) staffByRole[role] = await c.addStaff(role);
   await c.assign(staffByRole.PLATFORM_SUPPORT.staffId, homeA);
   await c.assign(staffByRole.INSTALLER.staffId, homeA);
@@ -87,13 +104,13 @@ describe.each(PLATFORM_ROLES)('permission matrix: %s', (role) => {
         const guard = c.app.routeGuards.find((r) => `${r.method} ${r.url}` === key)!.guard as { action: PlatformAction };
         const scope = platformScope(role, guard.action);
         const homeId = target === 'unassigned' ? homeB : homeA;
-        const req = await build(homeId);
+        const req = await build(homeId, staffByRole[role]);
         const res = await c.req(method, req.url, { cookie: staffByRole[role].cookie, body: req.body });
 
         if (!scope) expect(res.status, JSON.stringify(res.body)).toBe(403);
-        else if (scope === 'assigned' && target === 'unassigned') expect(res.status).toBe(404);
+        else if ((scope === 'assigned' || scope === 'grant') && target === 'unassigned') expect(res.status).toBe(404);
         else expect(res.status, JSON.stringify(res.body)).toBeGreaterThanOrEqual(200);
-        if (scope && !(scope === 'assigned' && target === 'unassigned')) expect(res.status, JSON.stringify(res.body)).toBeLessThan(300);
+        if (scope && !((scope === 'assigned' || scope === 'grant') && target === 'unassigned')) expect(res.status, JSON.stringify(res.body)).toBeLessThan(300);
       });
     }
   }

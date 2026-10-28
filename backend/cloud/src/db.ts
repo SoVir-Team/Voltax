@@ -78,5 +78,6 @@ export async function migrate(db: Db, dir = MIGRATIONS_DIR): Promise<string[]> {
     });
     applied.push(name);
   }
+  await db.exec(readFileSync(`${dir}privileges.sql`, 'utf8'));
   return applied;
 }

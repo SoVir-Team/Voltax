@@ -46,6 +46,8 @@ export interface CloudApiDeps {
   staff: StaffService;
   homes: HomesService;
   config: CloudApiConfig;
+  /** Full audit verification (chain + signed checkpoints). Defaults to the chain only. */
+  verifyAudit?: () => Promise<{ ok: boolean }>;
   /** Feature modules (grants, fleet, notifications) register their routes here; same guard rules. */
   plugins?: Array<(app: FastifyInstance) => Promise<void> | void>;
 }
@@ -299,8 +301,8 @@ export async function buildCloudApi(deps: CloudApiDeps, serverOptions: FastifySe
   });
 
   app.post('/api/v1/audit/verify', { config: { guard: { action: 'audit.verify' } } }, async (req) => {
-    const result = await audit.verify();
-    await audit.append({ actor: `staff:${staffIdOf(req)}`, action: 'audit.verify', outcome: result.ok ? 'ok' : 'error', details: { ...result } });
+    const result = await (deps.verifyAudit ?? (() => audit.verify()))();
+    await audit.append({ actor: `staff:${staffIdOf(req)}`, action: 'audit.verify', outcome: result.ok ? 'ok' : 'error', details: { ok: result.ok } });
     return result;
   });
 

@@ -174,4 +174,26 @@ describe('staff authentication', () => {
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['cache-control']).toBe('no-store');
   });
+
+  it('retention: ended sessions and used or expired setup links are deleted; live ones stay', async () => {
+    const live = await c.addStaff('INSTALLER');
+    const gone = await c.addStaff('INSTALLER');
+    await c.req('POST', '/api/v1/auth/logout', { cookie: gone.cookie });
+    const { setupToken } = await c.staff.create({ email: 'pending.setup@voltex.test', displayName: 'Pending', role: 'INSTALLER' }, 'cli');
+    const count = async (sql: string) => Number((await c.db.query<{ n: number }>(sql))[0]!.n);
+    const usedOrOld = "SELECT count(*)::int AS n FROM staff_setup_tokens WHERE used_at IS NOT NULL OR expires_at <= (extract(epoch from now()) * 1000)::bigint";
+    expect(await count(usedOrOld)).toBeGreaterThan(0); // every addStaff used a setup link
+
+    const removed = await c.staff.purgeExpired();
+    expect(removed.sessions).toBeGreaterThan(0);
+    expect(await count(usedOrOld)).toBe(0);
+    expect(await count('SELECT count(*)::int AS n FROM sessions WHERE revoked_at IS NOT NULL')).toBe(0);
+    expect((await c.req('GET', '/api/v1/auth/me', { cookie: live.cookie })).status).toBe(200);
+    expect((await c.req('POST', '/api/v1/auth/setup', { body: { token: setupToken, password: PASSWORD } })).status).toBe(200);
+
+    // Sessions past their idle or absolute limit go too.
+    await c.db.query('UPDATE sessions SET last_seen_at = 0');
+    await c.staff.purgeExpired();
+    expect(await count('SELECT count(*)::int AS n FROM sessions')).toBe(0);
+  });
 });

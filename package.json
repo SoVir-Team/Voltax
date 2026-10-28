@@ -16,6 +16,9 @@
     "dev:web": "npm run dev -w frontend/web",
     "typecheck": "npm run build -w shared/contracts && npm run typecheck --workspaces",
     "test": "npm run build -w shared/contracts && npm run test --workspaces --if-present",
-    "test:host": "node tools/test-host.mjs"
+    "test:host": "node tools/test-host.mjs",
+    "test:pg": "npm run test:pg -w backend/cloud",
+    "test:brokers": "npm run test:brokers -w backend/cloud",
+    "test:services": "npm run test:services -w backend/cloud"
   }
 }

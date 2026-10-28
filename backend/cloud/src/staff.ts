@@ -169,6 +169,13 @@ export class StaffService {
     };
   }
 
+  /** Retention: deletes sessions that can no longer be used and setup links that are used or expired. */
+  async purgeExpired(now = Date.now()): Promise<{ sessions: number; setupTokens: number }> {
+    const sessions = await this.db.query('DELETE FROM sessions WHERE revoked_at IS NOT NULL OR expires_at <= $1 OR last_seen_at <= $2 RETURNING 1', [now, now - SESSION_IDLE_MS]);
+    const tokens = await this.db.query('DELETE FROM staff_setup_tokens WHERE used_at IS NOT NULL OR expires_at <= $1 RETURNING 1', [now]);
+    return { sessions: sessions.length, setupTokens: tokens.length };
+  }
+
   async logout(session: Session): Promise<void> {
     await this.db.query('UPDATE sessions SET revoked_at = $2 WHERE token_hash = $1 AND revoked_at IS NULL', [session.tokenHash, Date.now()]);
     await this.audit.append({ actor: `staff:${session.staffId}`, action: 'auth.logout', outcome: 'ok' });
