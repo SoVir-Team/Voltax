@@ -80,10 +80,39 @@ the old version. Not covered here: systemd path activation and a real signed rel
 
 ## P4. Cloud core
 
-- [ ] `backend/cloud` workspace, DB adapter (pg / PGlite), migrations
-- [ ] Staff auth: scrypt, TOTP, sessions, bootstrap CLI
-- [ ] Homes, hubs, assignments; deny-by-default route guard
-- [ ] Matrix-generated negative tests, cross-home isolation, manipulated IDs, replay
+- [x] `backend/cloud` workspace, DB adapter (pg / PGlite), migrations
+- [x] Staff auth: scrypt, TOTP, sessions, bootstrap CLI
+- [x] Homes, hubs, assignments; deny-by-default route guard
+- [x] Matrix-generated negative tests, cross-home isolation, manipulated IDs, replay
+
+Evidence (P4): `npm test -w backend/cloud` → 4 files, 116 tests passed (2026-10-28 14:57) on PGlite
+(real Postgres SQL, plpgsql triggers, advisory locks). Real PostgreSQL 18 run is `test:pg` in P5.
+- `authz-matrix.test.ts` (81): every action route x every platform role x assigned/unassigned
+  home, expected result computed from `permissions.ts`; a coverage test fails if a registered route
+  has no matrix entry; every non-public route is 401 without a session; forged cookies 401;
+  random/malformed/injection home ids 404 for every role; a home id in body or query cannot widen
+  the URL scope; support lists only assigned homes; owner contact only via the audited
+  `home.contact.read`; denials audited with role and reason; a setup-only (no TOTP) session is 403
+  on every action route.
+- `auth.test.ts` (17): single-use setup links; password alone never opens a session; TOTP code
+  replay refused; lockout after 5 failures; same answer for unknown account and wrong password;
+  logout then cookie replay 401; expired and idle sessions 401; disabling kills sessions at once;
+  role change applies on the next request; no self-demotion, last super admin protected;
+  `bootstrap-admin` refused once an admin exists; credential reset; cross-origin POST 403 and
+  `text/plain` 415; audit never contains passwords, TOTP secrets or session tokens; per-IP login
+  rate limit (10/min); security headers and `no-store`.
+- `homes.test.ts` (10): assignment revoke and expiry take effect immediately; super admins cannot be
+  assigned; role change drops assignments; hub broker password returned once, stored as SHA-256 only,
+  rotation invalidates the old one; hub ids cannot move homes; devices expose id + online only;
+  audit UPDATE/DELETE/TRUNCATE refused by triggers; a trigger-bypassing edit is detected by verify.
+- `crypto.test.ts` (8): TOTP matches RFC 6238 SHA-1 vectors; drift window ±1 step; AES-GCM sealed
+  TOTP secrets fail with wrong key or tampering; scrypt salted; redaction; guard registration refuses
+  unguarded routes, unlisted public routes, and scoped actions without a home resolver.
+- `npm run typecheck` clean; `npm run build -w backend/cloud` clean; full `npm test` green
+  (contracts 15, hub 86, cloud 116, web 10).
+
+Note: npm 11.6.0 drops platform optional packages from the lockfile when it changes; the lockfile was
+regenerated with npm 10.9.4 (`npx npm@10.9.4 install --package-lock-only`), then `npm ci`.
 
 ## P5. Cloud grants, audit, notifications
 

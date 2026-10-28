@@ -4,6 +4,7 @@
   "workspaces": [
     "shared/contracts",
     "backend/hub",
+    "backend/cloud",
     "frontend/web"
   ],
   "engines": {
