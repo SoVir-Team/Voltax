@@ -1,0 +1,9 @@
+[Unit]
+Description=VOLTEX: apply a hub update request (voltax-update verifies the signed release)
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/voltax-update-request
+TimeoutStartSec=30min

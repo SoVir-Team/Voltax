@@ -10,7 +10,14 @@ const https = config.ALLOW_INSECURE_HTTP
 
 const cloudKey = existsSync(config.CLOUD_COMMAND_PUBKEY) ? readFileSync(config.CLOUD_COMMAND_PUBKEY, 'utf8') : null;
 
-const hub = await createHub({ ...config, CLOUD_COMMAND_PUBKEY_PEM: cloudKey }, {
+// A restart approved under a support grant: graceful shutdown; Docker (restart: unless-stopped)
+// starts the container again.
+const onRestartRequested = () => {
+  setTimeout(() => process.kill(process.pid, 'SIGTERM'), 1000).unref();
+  return true;
+};
+
+const hub = await createHub({ ...config, CLOUD_COMMAND_PUBKEY_PEM: cloudKey, onRestartRequested }, {
   logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization'] },
   ...(https ? { https } : {}),
 });

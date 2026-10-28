@@ -63,9 +63,20 @@ Evidence (P2): `backend/hub/test/grants.test.ts`, 30 tests:
 
 ## P3. Hub cloud-link
 
-- [ ] `cloud-link.ts` (off unless `CLOUD_URL`), telemetry allow-list, audit export
-- [ ] Update request file + host path unit + root script re-verifying signature
-- [ ] Tests with in-process broker
+- [x] `cloud-link.ts` (off unless `CLOUD_URL`), telemetry allow-list, audit export
+- [x] Update request file + host path unit + root script (root side runs `voltax-update`, which checks the minisign signature before installing; the hub never holds the key or runs the updater)
+- [x] Tests with in-process broker
+
+Evidence (P3): `npm test -w backend/hub` → 7 files, 86 tests passed (2026-10-28 14:38), including
+`cloud-link.test.ts`: link off by default, telemetry carries only allow-listed fields, signed envelopes
+arrive on `voltax-cloud/<hubId>/down` and results go out on `/up`, the audit chain is exported once
+with a persisted cursor, an owner-approved update writes `request.json`. `npm run typecheck` clean.
+`bash -n` on every `deploy/pi` script clean. `npm run test:host` (new; Debian 12 container on
+Docker 29.2.1) → 17 passed, 0 failed: version injection refused and not executed, garbage refused,
+request consumed, same version is a no-op, downgrade refused with reason, rollout id reported back,
+upgrade switches `current`, result file 10001/644, failed update reported `rolled_back` and still on
+the old version. Not covered here: systemd path activation and a real signed release on a Pi
+(hardware, see production gate).
 
 ## P4. Cloud core
 

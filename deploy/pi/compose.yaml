@@ -43,6 +43,8 @@ services:
     volumes:
       - /var/lib/voltax/hub:/var/lib/voltax/hub
       - /var/lib/voltax/backups:/var/lib/voltax/backups
+      - /var/lib/voltax/update-request:/var/lib/voltax/update-request   # hand-off to the root updater
+      - /etc/voltax/cloud:/etc/voltax/cloud:ro                          # pinned cloud key + broker CA
       - /etc/voltax/tls:/etc/voltax/tls:ro
       - /run/systemd/timesync:/run/systemd/timesync:ro
     stop_grace_period: 20s

@@ -108,10 +108,12 @@ install -d -m 755 "$VOLTAX_OPT" "$VOLTAX_OPT/releases"
 install -d -m 755 "$VOLTAX_DATA"
 install -d -m 700 -o $HUB_UID -g $HUB_UID "$VOLTAX_DATA/hub"
 install -d -m 770 -o root -g $HUB_UID "$VOLTAX_DATA/backups"
+install -d -m 700 -o $HUB_UID -g $HUB_UID "$VOLTAX_DATA/update-request"
 install -d -m 700 -o $MQTT_UID -g $MQTT_UID "$VOLTAX_DATA/mosquitto"
 install -d -m 755 "$VOLTAX_ETC"
 install -d -m 750 -o $MQTT_UID -g $MQTT_UID "$VOLTAX_ETC/mosquitto"
 install -d -m 750 -o root -g $HUB_UID "$VOLTAX_ETC/tls"
+install -d -m 750 -o root -g $HUB_UID "$VOLTAX_ETC/cloud"
 
 # ---------------------------------------------------------------- secrets + broker users
 umask 077
@@ -157,7 +159,7 @@ install -d /usr/local/lib/voltax
 install -m 644 "$HERE/scripts/lib.sh" /usr/local/lib/voltax/lib.sh
 for pair in voltax-update:voltax-update.sh voltax-boot-check:voltax-boot-check.sh voltax-backup:backup.sh \
             voltax-restore:restore.sh voltax-health:voltax-health.sh voltax-hubctl:voltax-hubctl.sh \
-            add-device:add-device.sh remove-device:remove-device.sh; do
+            add-device:add-device.sh remove-device:remove-device.sh voltax-update-request:voltax-update-request.sh; do
   install -m 755 "$HERE/scripts/${pair#*:}" "/usr/local/bin/${pair%%:*}"
 done
 if [ -f "$HERE/keys/voltax-release.pub" ]; then
@@ -167,8 +169,8 @@ else
 fi
 for unit in "$HERE"/systemd/*; do install -m 644 "$unit" /etc/systemd/system/; done
 systemctl daemon-reload
-systemctl enable voltax-boot-check.service voltax-hub.service voltax-health.timer voltax-backup.timer >/dev/null
-systemctl start voltax-health.timer voltax-backup.timer
+systemctl enable voltax-boot-check.service voltax-hub.service voltax-health.timer voltax-backup.timer voltax-update-request.path >/dev/null
+systemctl start voltax-health.timer voltax-backup.timer voltax-update-request.path
 
 cat <<EOF
 

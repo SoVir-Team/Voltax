@@ -19,8 +19,15 @@ const schema = z.object({
   ALLOW_INSECURE_HTTP: bool.default(false),
   UI_DIR: z.string().default('/app/public'),
   TIME_SYNC_FILE: z.string().default('/run/systemd/timesync/synchronized'),
+  // Optional cloud link (remote support, fleet). Empty CLOUD_URL = fully local hub, nothing changes.
+  CLOUD_URL: z.string().default(''),
+  CLOUD_PASSWORD: z.string().default(''),
+  CLOUD_CA: z.string().default('/etc/voltax/cloud/ca.crt'),
   // Pinned Ed25519 public key of the VOLTEX cloud command signer (PEM). Missing = cloud requests refused.
-  CLOUD_COMMAND_PUBKEY: z.string().default('/etc/voltax/cloud-command.pub'),
+  CLOUD_COMMAND_PUBKEY: z.string().default('/etc/voltax/cloud/cloud-command.pub'),
+  TELEMETRY_INTERVAL_MS: z.coerce.number().int().min(5_000).max(3_600_000).default(60_000),
+  // Hand-off folder to the root updater on the host (see deploy/pi/scripts/voltax-update-request.sh).
+  UPDATE_DIR: z.string().default('/var/lib/voltax/update-request'),
   TZ: z.string().default('Asia/Kolkata'),
   VOLTAX_VERSION: z.string().default('dev'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),

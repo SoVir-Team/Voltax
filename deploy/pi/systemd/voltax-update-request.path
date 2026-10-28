@@ -1,0 +1,9 @@
+[Unit]
+Description=VOLTEX: watch for hub update requests (owner-approved, signature checked by root)
+
+[Path]
+PathExists=/var/lib/voltax/update-request/request.json
+Unit=voltax-update-request.service
+
+[Install]
+WantedBy=paths.target

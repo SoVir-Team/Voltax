@@ -37,12 +37,17 @@ done
 check "hub can write its database directory" in_container voltax-hub 'touch /var/lib/voltax/hub/.permtest && rm /var/lib/voltax/hub/.permtest'
 check "hub can read its TLS key" in_container voltax-hub 'test -r /etc/voltax/tls/hub.key'
 check "hub cannot write its TLS directory" not_writable voltax-hub /etc/voltax/tls/permtest
+check "hub cannot change the pinned cloud key" not_writable voltax-hub /etc/voltax/cloud/permtest
+check "hub can only drop update requests (not run the updater)" in_container voltax-hub 'touch /var/lib/voltax/update-request/.permtest && rm /var/lib/voltax/update-request/.permtest'
+check "hub cannot see the release signing key config" not in_container voltax-hub 'test -e /etc/voltax/release.pub'
 check "hub cannot see broker passwords" not in_container voltax-hub 'test -e /etc/voltax/mosquitto/passwd'
 
 echo "Host files"
 mode "$VOLTAX_DATA/hub" "$HUB_UID:$HUB_UID" 700
 mode "$VOLTAX_DATA/backups" "0:$HUB_UID" 770
 mode "$VOLTAX_DATA/mosquitto" "$MQTT_UID:$MQTT_UID" 700
+mode "$VOLTAX_DATA/update-request" "$HUB_UID:$HUB_UID" 700
+mode "$VOLTAX_ETC/cloud" "0:$HUB_UID" 750
 mode "$VOLTAX_ETC/hub.env" 0:0 600
 mode "$VOLTAX_ETC/mosquitto-health.env" 0:0 600
 mode "$VOLTAX_ETC/mosquitto/passwd" "$MQTT_UID:$MQTT_UID" 600
