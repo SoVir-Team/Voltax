@@ -4,6 +4,9 @@ import type { CommandManager } from './commands.js';
 import type { DB } from './db.js';
 import type { EventLog } from './events.js';
 import type { StateReport } from './mqtt-link.js';
+import { switchTargetError } from './scheduler.js';
+
+export class InvalidAutomationError extends Error {}
 
 export interface Automation extends AutomationInput {
   automationId: string;
@@ -57,6 +60,7 @@ export class AutomationEngine {
   }
 
   create(input: AutomationInput): Automation {
+    this.validate(input);
     const id = randomUUID();
     this.db
       .prepare('INSERT INTO automations (automation_id, name, enabled, definition, updated_at) VALUES (?, ?, ?, ?, ?)')
@@ -64,16 +68,28 @@ export class AutomationEngine {
     return this.get(id)!;
   }
 
-  update(id: string, input: AutomationInput): Automation | null {
+  /** null = not found; 'conflict' = `version` is not the stored one. Any accepted edit cancels a pending revert. */
+  update(id: string, input: AutomationInput, version: number): Automation | null | 'conflict' {
+    this.validate(input);
     const changes = this.db
-      .prepare('UPDATE automations SET name = ?, enabled = ?, definition = ?, version = version + 1, updated_at = ? WHERE automation_id = ?')
-      .run(input.name, input.enabled ? 1 : 0, definition(input), Date.now(), id).changes;
-    return changes ? this.get(id) : null;
+      .prepare('UPDATE automations SET name = ?, enabled = ?, definition = ?, version = version + 1, updated_at = ? WHERE automation_id = ? AND version = ?')
+      .run(input.name, input.enabled ? 1 : 0, definition(input), Date.now(), id, version).changes;
+    if (!changes) return this.get(id) ? 'conflict' : null;
+    this.clearTimer(id);
+    return this.get(id);
   }
 
   delete(id: string): boolean {
     this.clearTimer(id);
     return this.db.prepare('DELETE FROM automations WHERE automation_id = ?').run(id).changes > 0;
+  }
+
+  private validate(input: AutomationInput): void {
+    if (!this.db.prepare('SELECT 1 FROM entities WHERE entity_id = ?').get(input.trigger.entityId)) {
+      throw new InvalidAutomationError(`unknown entity ${input.trigger.entityId}`);
+    }
+    const target = switchTargetError(this.db, input.action.entityId);
+    if (target) throw new InvalidAutomationError(target);
   }
 
   private run(a: Automation): void {

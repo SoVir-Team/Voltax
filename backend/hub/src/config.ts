@@ -28,6 +28,8 @@ const schema = z.object({
   TELEMETRY_INTERVAL_MS: z.coerce.number().int().min(5_000).max(3_600_000).default(60_000),
   // Hand-off folder to the root updater on the host (see deploy/pi/scripts/voltax-update-request.sh).
   UPDATE_DIR: z.string().default('/var/lib/voltax/update-request'),
+  // Contact sent to browser push services with each notification (VAPID). Use the home's or installer's.
+  PUSH_SUBJECT: z.string().regex(/^(mailto:|https:)/).default('mailto:owner@voltex-hub.local'),
   TZ: z.string().default('Asia/Kolkata'),
   VOLTAX_VERSION: z.string().default('dev'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),

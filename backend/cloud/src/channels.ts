@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import webpush from 'web-push';
-import type { PushSubscriptionInput } from '@voltax/contracts';
+import { PUSH_SERVICE_HOSTS, type PushSubscriptionInput } from '@voltax/contracts';
 import type { Db } from './db.js';
 import { badRequest } from './errors.js';
 import { NotificationError, type EmailChannel } from './notifications.js';
@@ -65,11 +65,7 @@ export class WebPushSender implements PushSender {
   }
 }
 
-/**
- * Hosts of the browser push services. The server sends HTTP requests to subscription endpoints, so
- * only these are accepted (no server-side request forgery through a crafted "subscription").
- */
-export const PUSH_SERVICE_HOSTS = [/^fcm\.googleapis\.com$/, /\.push\.services\.mozilla\.com$/, /\.notify\.windows\.com$/, /^web\.push\.apple\.com$/, /\.push\.apple\.com$/];
+export { PUSH_SERVICE_HOSTS }; // shared with the hub (shared/contracts)
 
 export class StaffPush {
   constructor(

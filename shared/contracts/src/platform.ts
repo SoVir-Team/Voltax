@@ -168,6 +168,12 @@ export interface NotificationView {
 
 // --- Web Push (staff portal) ---------------------------------------------------------------------
 
+/**
+ * Hosts of the browser push services. Servers (cloud and hub) send HTTP requests to subscription
+ * endpoints, so only these are accepted: no server-side request forgery through a crafted subscription.
+ */
+export const PUSH_SERVICE_HOSTS = [/^fcm\.googleapis\.com$/, /\.push\.services\.mozilla\.com$/, /\.notify\.windows\.com$/, /^web\.push\.apple\.com$/, /\.push\.apple\.com$/];
+
 export const pushSubscriptionSchema = z.object({
   endpoint: z.url({ protocol: /^https$/ }).max(1000),
   keys: z.object({ p256dh: z.string().regex(/^[A-Za-z0-9_-]{80,100}$/), auth: z.string().regex(/^[A-Za-z0-9_-]{16,32}$/) }),

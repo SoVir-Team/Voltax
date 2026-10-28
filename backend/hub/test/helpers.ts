@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import aedes from 'aedes';
 import mqtt, { type MqttClient } from 'mqtt';
 import { createHub, type Hub } from '../src/hub.js';
+import type { PushSender } from '../src/push.js';
 
 export const HUB_ID = 'test-hub';
 export const RELAY = 'esp-relay-01.switch.relay_1';
@@ -87,7 +88,7 @@ export interface LocalBroker {
 }
 
 export async function startEnv(
-  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean; cloudUrl?: string; cloudPassword?: string; localBroker?: LocalBroker; version?: string } = {},
+  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean; cloudUrl?: string; cloudPassword?: string; localBroker?: LocalBroker; version?: string; pushSender?: PushSender | null } = {},
 ): Promise<TestEnv> {
   const broker = opts.localBroker ?? (await startBroker());
   const dir = opts.dir ?? mkdtempSync(join(tmpdir(), 'voltax-hub-'));
@@ -107,6 +108,7 @@ export async function startEnv(
       TIME_SYNC_FILE: syncFile,
       CLOUD_COMMAND_PUBKEY_PEM: opts.cloudKeyPem ?? null,
       UPDATE_DIR: join(dir, 'update-request'),
+      pushSender: opts.pushSender ?? null, // tests never reach real push services
       ...(opts.cloudUrl ? { CLOUD_URL: opts.cloudUrl, CLOUD_PASSWORD: opts.cloudPassword ?? 'x', TELEMETRY_INTERVAL_MS: 5_000 } : {}),
     },
     { logger: false },

@@ -47,9 +47,29 @@ describe('schedules (run on the hub, no cloud)', () => {
       method: 'PUT',
       url: `/api/v1/schedules/${created.scheduleId}`,
       headers: owner,
-      payload: { name: 'off', cron: '0 7 * * *', entityId: RELAY, value: true, enabled: true },
+      payload: { name: 'off', cron: '0 7 * * *', entityId: RELAY, value: true, enabled: true, version: created.version },
     });
     expect(updated.json<{ version: number }>().version).toBe(created.version + 1);
+  });
+
+  it('refuses targets that do not exist or are not switches', async () => {
+    for (const entityId of ['ghost.switch.relay_9', BUTTON]) {
+      const res = await env.hub.app.inject({ method: 'POST', url: '/api/v1/schedules', headers: owner, payload: { name: 'x', cron: '0 7 * * *', entityId, value: true } });
+      expect(res.statusCode, entityId).toBe(400);
+    }
+  });
+
+  it('an update must name the version it edits; a stale one is a conflict (409)', async () => {
+    const created = (
+      await env.hub.app.inject({ method: 'POST', url: '/api/v1/schedules', headers: owner, payload: { name: 'a', cron: '0 7 * * *', entityId: RELAY, value: true } })
+    ).json<{ scheduleId: string; version: number }>();
+    const put = (version?: number) =>
+      env.hub.app.inject({ method: 'PUT', url: `/api/v1/schedules/${created.scheduleId}`, headers: owner, payload: { name: 'b', cron: '0 8 * * *', entityId: RELAY, value: true, version } });
+    expect((await put()).statusCode).toBe(400);
+    expect((await put(created.version)).statusCode).toBe(200);
+    const stale = await put(created.version); // someone else saved in between
+    expect(stale.statusCode).toBe(409);
+    expect(env.hub.scheduler.get(created.scheduleId)!.cron).toBe('0 8 * * *');
   });
 });
 
@@ -67,6 +87,34 @@ describe('automations (run on the hub, no cloud)', () => {
     await env.device.publishButton(true);
     await waitFor(() => env.device.relay === true);
     await waitFor(() => env.device.relay === false, 4000);
+  });
+
+  it('refuses an action on a non-switch and a trigger on an unknown entity', async () => {
+    expect((await create({ entityId: BUTTON, value: true })).statusCode).toBe(400);
+    const unknownTrigger = await env.hub.app.inject({
+      method: 'POST',
+      url: '/api/v1/automations',
+      headers: owner,
+      payload: { name: 'x', trigger: { entityId: 'ghost.binary_sensor.b', to: true }, action: { entityId: RELAY, value: true } },
+    });
+    expect(unknownTrigger.statusCode).toBe(400);
+  });
+
+  it('disabling or editing a rule cancels its pending revert; a stale edit is a conflict', async () => {
+    const a = (await create({ entityId: RELAY, value: true, revertAfterSeconds: 1 })).json<{ automationId: string; version: number }>();
+    await env.device.publishButton(true);
+    await waitFor(() => env.device.relay === true);
+    const put = (version: number) =>
+      env.hub.app.inject({
+        method: 'PUT',
+        url: `/api/v1/automations/${a.automationId}`,
+        headers: owner,
+        payload: { name: 'boot -> relay', enabled: false, trigger: { entityId: BUTTON, to: true }, action: { entityId: RELAY, value: true, revertAfterSeconds: 1 }, version },
+      });
+    expect((await put(a.version)).statusCode).toBe(200);
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(env.device.relay).toBe(true); // the revert was cancelled with the edit
+    expect((await put(a.version)).statusCode).toBe(409);
   });
 
   it('does not trigger from retained snapshots or duplicate reports', async () => {

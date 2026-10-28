@@ -13,6 +13,7 @@ import { EnvelopeVerifier } from './envelope.js';
 import { EventLog } from './events.js';
 import { SupportGrants } from './grants.js';
 import { MqttLink } from './mqtt-link.js';
+import { HubPush, hubVapidKeys, WebPushSender, type PushSender } from './push.js';
 import { Scheduler } from './scheduler.js';
 import { Store } from './store.js';
 import { UpdateDropbox, UpdateService } from './updates.js';
@@ -31,6 +32,7 @@ export interface Hub {
   grants: SupportGrants;
   updates: UpdateDropbox;
   updateService: UpdateService;
+  push: HubPush;
   /** Only when CLOUD_URL is configured. */
   cloud: CloudLink | null;
   start(): Promise<void>;
@@ -44,6 +46,10 @@ type HubConfig = Pick<
   Partial<Pick<Config, 'CLOUD_URL' | 'CLOUD_PASSWORD' | 'CLOUD_CA' | 'TELEMETRY_INTERVAL_MS' | 'UPDATE_DIR'>> & {
     UI_DIR?: string;
     CLOUD_COMMAND_PUBKEY_PEM?: string | null;
+    /** Contact the push services see in VAPID requests (`mailto:` or `https:`). */
+    PUSH_SUBJECT?: string;
+    /** Tests replace the real push sender. */
+    pushSender?: PushSender | null;
     /** Restart under a support grant (main.ts: graceful exit; Docker restarts the container). */
     onRestartRequested?: () => boolean;
   };
@@ -143,6 +149,10 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
   });
   updateService.setSink((msg) => grants.forward(msg));
 
+  const vapid = hubVapidKeys(db);
+  const pushSender = config.pushSender !== undefined ? config.pushSender : new WebPushSender({ subject: config.PUSH_SUBJECT ?? 'mailto:owner@voltex-hub.local', ...vapid });
+  const push = new HubPush(db, auth, events, pushSender, vapid.publicKey);
+
   const cloud = config.CLOUD_URL
     ? new CloudLink(
         {
@@ -170,6 +180,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       audit,
       grants,
       updates: updateService,
+      push,
       scheduler,
       automations,
       health,
@@ -195,6 +206,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
     grants,
     updates,
     updateService,
+    push,
     cloud,
     async start() {
       const failed = commands.recoverAfterRestart();
@@ -204,6 +216,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       scheduler.start();
       grants.start();
       updateService.start();
+      push.start();
       cloud?.start();
       housekeeping = setInterval(() => {
         commands.prune();
@@ -217,6 +230,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       scheduler.stop();
       grants.stop();
       updateService.stop();
+      push.stop();
       automations.stop();
       commands.stop();
       await cloud?.stop();

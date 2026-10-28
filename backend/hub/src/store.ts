@@ -14,6 +14,7 @@ interface EntityRow {
 interface DeviceRow {
   device_id: string;
   name: string;
+  room: string | null;
   online: number;
   last_seen: number | null;
 }
@@ -68,6 +69,7 @@ export class Store {
     return devices.map((d) => ({
       deviceId: d.device_id,
       name: d.name,
+      room: d.room,
       online: d.online === 1,
       lastSeen: d.last_seen,
       entities: entities.filter((e) => e.device_id === d.device_id).map(toEntityView),
@@ -76,6 +78,10 @@ export class Store {
 
   renameDevice(deviceId: string, name: string): boolean {
     return this.db.prepare('UPDATE devices SET name = ? WHERE device_id = ?').run(name, deviceId).changes > 0;
+  }
+
+  setRoom(deviceId: string, room: string | null): boolean {
+    return this.db.prepare('UPDATE devices SET room = ? WHERE device_id = ?').run(room, deviceId).changes > 0;
   }
 
   renameEntity(id: string, name: string): boolean {

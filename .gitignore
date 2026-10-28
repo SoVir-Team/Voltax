@@ -9,6 +9,7 @@ coverage/
 .env*
 !*.env.example
 secrets.yaml
+secrets.*.yaml
 *.pem
 *.key
 

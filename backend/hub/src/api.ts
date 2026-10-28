@@ -4,6 +4,7 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import {
   automationInputSchema,
+  automationUpdateSchema,
   commandRequestSchema,
   homeRoleOf,
   homeScope,
@@ -11,8 +12,13 @@ import {
   memberDevicesSchema,
   pairRequestSchema,
   parseEntityId,
+  pushSubscriptionSchema,
+  pushUnsubscribeSchema,
   renameSchema,
+  roleChangeSchema,
+  roomSchema,
   scheduleInputSchema,
+  scheduleUpdateSchema,
   updatePolicyBodySchema,
   wsClientMessageSchema,
   type ClientView,
@@ -28,7 +34,9 @@ import type { AutomationEngine } from './automations.js';
 import type { CommandManager } from './commands.js';
 import type { EventLog } from './events.js';
 import type { SupportGrants } from './grants.js';
+import type { HubPush } from './push.js';
 import { InvalidScheduleError, type Scheduler } from './scheduler.js';
+import { InvalidAutomationError } from './automations.js';
 import type { Store } from './store.js';
 import type { UpdateService } from './updates.js';
 
@@ -43,6 +51,7 @@ export interface ApiDeps {
   audit: AuditLog;
   grants: SupportGrants;
   updates: UpdateService;
+  push: HubPush;
   scheduler: Scheduler;
   automations: AutomationEngine;
   health: () => HealthView;
@@ -156,6 +165,30 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     return reply.status(201).send({ clientId: result.clientId, token: result.token, role: result.role });
   });
 
+  // --- this client: its current role and devices (a role change applies without pairing again) ---
+  app.get('/api/v1/me', can('events.read'), async (req) => {
+    const c = req.client!;
+    return { clientId: c.clientId, name: c.name, role: c.role, devices: c.role === 'member' ? deps.auth.memberDevices(c.clientId) : '*', push: deps.push.count(c.clientId) };
+  });
+
+  // --- browser notifications (opt-in per phone/browser) ---
+  app.get('/api/v1/push/key', can('events.read'), async (_req, reply) =>
+    deps.push.publicKey ? { publicKey: deps.push.publicKey } : reply.status(404).send({ error: 'notifications are not available on this hub' }),
+  );
+  app.post('/api/v1/push/subscriptions', can('events.read'), async (req, reply) => {
+    const body = parse(pushSubscriptionSchema, req.body, reply);
+    if (!body) return;
+    if (deps.push.subscribe(req.client!.clientId, body) === 'bad_host') return reply.status(400).send({ error: 'not a supported browser push service' });
+    deps.audit.append({ actor: actor(req), action: 'push.subscribe', outcome: 'ok', details: { host: new URL(body.endpoint).hostname } });
+    return reply.status(204).send();
+  });
+  app.delete('/api/v1/push/subscriptions', can('events.read'), async (req, reply) => {
+    const body = parse(pushUnsubscribeSchema, req.body, reply);
+    if (!body) return;
+    deps.push.unsubscribe(req.client!.clientId, body.endpoint);
+    return reply.status(204).send();
+  });
+
   // --- clients & pairing (owner) ---
   app.post('/api/v1/pairing-codes', can('client.manage'), async (req, reply) => {
     const body = parse(inviteSchema, req.body, reply);
@@ -174,6 +207,15 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     if (r === 'not_found') return reply.status(404).send({ error: 'client not found' });
     if (r === 'not_member') return reply.status(409).send({ error: 'owners always have every device' });
     deps.audit.append({ actor: actor(req), action: 'client.devices', outcome: 'ok', target: req.params.id, details: { devices: body.devices } });
+    return reply.status(204).send();
+  });
+  app.put<{ Params: { id: string } }>('/api/v1/clients/:id/role', can('client.manage'), async (req, reply) => {
+    const body = parse(roleChangeSchema, req.body, reply);
+    if (!body) return;
+    const r = deps.auth.setRole(req.params.id, body.role, body.devices);
+    if (r === 'not_found') return reply.status(404).send({ error: 'client not found' });
+    if (r === 'last_owner') return reply.status(409).send({ error: 'the home must keep at least one owner' });
+    deps.audit.append({ actor: actor(req), action: 'client.role', outcome: 'ok', target: req.params.id, details: { role: body.role, devices: body.role === 'member' ? (body.devices ?? '*') : null } });
     return reply.status(204).send();
   });
   app.delete<{ Params: { id: string } }>('/api/v1/clients/:id', can('client.manage'), async (req, reply) => {
@@ -196,6 +238,11 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     const body = parse(renameSchema, req.body, reply);
     if (!body) return;
     return deps.store.renameDevice(req.params.id, body.name) ? reply.status(204).send() : reply.status(404).send({ error: 'device not found' });
+  });
+  app.put<{ Params: { id: string } }>('/api/v1/devices/:id/room', can('device.manage'), async (req, reply) => {
+    const body = parse(roomSchema, req.body, reply);
+    if (!body) return;
+    return deps.store.setRoom(req.params.id, body.room) ? reply.status(204).send() : reply.status(404).send({ error: 'device not found' });
   });
   app.patch<{ Params: { id: string } }>('/api/v1/entities/:id', can('device.manage'), async (req, reply) => {
     const body = parse(renameSchema, req.body, reply);
@@ -232,10 +279,12 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     return scheduleErrors(reply, () => reply.status(201).send(deps.scheduler.create(body)));
   });
   app.put<{ Params: { id: string } }>('/api/v1/schedules/:id', can('schedule.manage'), async (req, reply) => {
-    const body = parse(scheduleInputSchema, req.body, reply);
+    const body = parse(scheduleUpdateSchema, req.body, reply);
     if (!body) return;
     return scheduleErrors(reply, () => {
-      const s = deps.scheduler.update(req.params.id, body);
+      const { version, ...input } = body;
+      const s = deps.scheduler.update(req.params.id, input, version);
+      if (s === 'conflict') return reply.status(409).send({ error: 'this schedule was changed by someone else; reload and try again' });
       return s ?? reply.status(404).send({ error: 'schedule not found' });
     });
   });
@@ -250,12 +299,17 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
   app.post('/api/v1/automations', can('automation.manage'), async (req, reply) => {
     const body = parse(automationInputSchema, req.body, reply);
     if (!body) return;
-    return reply.status(201).send(deps.automations.create(body));
+    return scheduleErrors(reply, () => reply.status(201).send(deps.automations.create(body)));
   });
   app.put<{ Params: { id: string } }>('/api/v1/automations/:id', can('automation.manage'), async (req, reply) => {
-    const body = parse(automationInputSchema, req.body, reply);
+    const body = parse(automationUpdateSchema, req.body, reply);
     if (!body) return;
-    return deps.automations.update(req.params.id, body) ?? reply.status(404).send({ error: 'automation not found' });
+    return scheduleErrors(reply, () => {
+      const { version, ...input } = body;
+      const a = deps.automations.update(req.params.id, input, version);
+      if (a === 'conflict') return reply.status(409).send({ error: 'this automation was changed by someone else; reload and try again' });
+      return a ?? reply.status(404).send({ error: 'automation not found' });
+    });
   });
   app.delete<{ Params: { id: string } }>('/api/v1/automations/:id', can('automation.manage'), async (req, reply) =>
     deps.automations.delete(req.params.id) ? reply.status(204).send() : reply.status(404).send({ error: 'automation not found' }),
@@ -330,7 +384,10 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
         return;
       }
       // The scope is re-read for every event, so a change to a member's devices applies at once.
-      const visible = (event: HubEvent) => eventVisible(deps.auth.deviceScope(client), event);
+      const visible = (event: HubEvent) => {
+        const current = deps.auth.get(client.clientId); // role and devices as they are now
+        return current !== null && eventVisible(deps.auth.deviceScope(current), event);
+      };
       // Replay then subscribe in the same tick: SQLite calls are synchronous, so no event can slip between.
       let lastSent = parsed.data.resumeAfterSeq ?? deps.events.lastSeq();
       for (const event of deps.events.since(lastSent)) {
@@ -389,7 +446,7 @@ function scheduleErrors<T>(reply: FastifyReply, fn: () => T): T | FastifyReply {
   try {
     return fn();
   } catch (err) {
-    if (err instanceof InvalidScheduleError) return reply.status(400).send({ error: err.message });
+    if (err instanceof InvalidScheduleError || err instanceof InvalidAutomationError) return reply.status(400).send({ error: err.message });
     throw err;
   }
 }

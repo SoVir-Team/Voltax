@@ -48,6 +48,11 @@ export type DeviceGrantInput = z.infer<typeof deviceGrantSchema>;
 /** POST /pairing-codes: the owner must say which devices the new member gets. */
 export const inviteSchema = z.object({ devices: deviceGrantSchema });
 export const memberDevicesSchema = z.object({ devices: deviceGrantSchema });
+/** PUT /clients/:id/role: promote a member or demote an owner (never the last one). A demoted owner gets `devices` (default '*'). */
+export const roleChangeSchema = z.object({ role: roleSchema, devices: deviceGrantSchema.optional() });
+/** PUT /devices/:id/room: a room label for grouping; null puts the device back under its own name. */
+export const roomSchema = z.object({ room: z.string().trim().min(1).max(40).nullable() });
+export const pushUnsubscribeSchema = z.object({ endpoint: z.url().max(1000) });
 
 export interface ClientView {
   clientId: string;
@@ -67,6 +72,9 @@ export const scheduleInputSchema = z.object({
   enabled: z.boolean().default(true),
 });
 export type ScheduleInput = z.infer<typeof scheduleInputSchema>;
+/** PUT carries the version being edited: a concurrent save in between is a 409, never a silent overwrite. */
+const editedVersion = { version: z.number().int().min(1) };
+export const scheduleUpdateSchema = scheduleInputSchema.extend(editedVersion);
 
 export const automationInputSchema = z.object({
   name: z.string().trim().min(1).max(64),
@@ -80,6 +88,7 @@ export const automationInputSchema = z.object({
   }),
 });
 export type AutomationInput = z.infer<typeof automationInputSchema>;
+export const automationUpdateSchema = automationInputSchema.extend(editedVersion);
 
 export interface EntityView {
   entityId: string;
@@ -95,6 +104,8 @@ export interface EntityView {
 export interface DeviceView {
   deviceId: string;
   name: string;
+  /** Room the owner put it in; null = not set (shown under the device name). */
+  room: string | null;
   online: boolean;
   lastSeen: number | null;
   entities: EntityView[];

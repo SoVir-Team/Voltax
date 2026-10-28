@@ -139,6 +139,29 @@ export class Auth {
     return 'ok';
   }
 
+  /** Current state of a client (role changes apply to open WebSockets too). Null once revoked. */
+  get(clientId: string): Client | null {
+    const row = this.db.prepare('SELECT * FROM clients WHERE client_id = ? AND revoked_at IS NULL').get(clientId) as ClientRow | undefined;
+    return row ? toClient(row) : null;
+  }
+
+  /** Promote a member or demote an owner. The last owner can never be demoted. */
+  setRole(clientId: string, role: Role, devices: DeviceGrant = '*'): 'ok' | 'not_found' | 'last_owner' {
+    return this.db.transaction(() => {
+      const row = this.db.prepare('SELECT role FROM clients WHERE client_id = ? AND revoked_at IS NULL').get(clientId) as { role: Role } | undefined;
+      if (!row) return 'not_found' as const;
+      if (row.role === role) return 'ok' as const;
+      if (role === 'member') {
+        const owners = this.db.prepare("SELECT COUNT(*) AS n FROM clients WHERE role = 'owner' AND revoked_at IS NULL").get() as { n: number };
+        if (owners.n <= 1) return 'last_owner' as const;
+      }
+      this.db.prepare('UPDATE clients SET role = ? WHERE client_id = ?').run(role, clientId);
+      if (role === 'member') this.writeDevices(clientId, devices);
+      else this.db.prepare('DELETE FROM client_devices WHERE client_id = ?').run(clientId);
+      return 'ok' as const;
+    })();
+  }
+
   listClients(): Client[] {
     return (this.db.prepare('SELECT * FROM clients ORDER BY created_at').all() as ClientRow[]).map(toClient);
   }

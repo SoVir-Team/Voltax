@@ -24,6 +24,13 @@ interface ScheduleRow {
 
 export class InvalidScheduleError extends Error {}
 
+/** The rule's target must exist and be a switch (sensors cannot be commanded). Shared with automations. */
+export function switchTargetError(db: DB, entityId: string): string | null {
+  const row = db.prepare('SELECT component FROM entities WHERE entity_id = ?').get(entityId) as { component: string } | undefined;
+  if (!row) return `unknown entity ${entityId}`;
+  return row.component === 'switch' ? null : `${entityId} is not a switch`;
+}
+
 /**
  * Runs schedules on the hub itself (no cloud). Missed runs while the hub is off are NOT replayed:
  * croner only fires future occurrences.
@@ -57,7 +64,7 @@ export class Scheduler {
   }
 
   create(input: ScheduleInput): Schedule {
-    this.validate(input.cron);
+    this.validate(input);
     const id = randomUUID();
     this.db
       .prepare('INSERT INTO schedules (schedule_id, name, cron, entity_id, value, enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
@@ -67,14 +74,15 @@ export class Scheduler {
     return s;
   }
 
-  update(id: string, input: ScheduleInput): Schedule | null {
-    this.validate(input.cron);
+  /** null = not found; 'conflict' = `version` is not the stored one (someone else saved first). */
+  update(id: string, input: ScheduleInput, version: number): Schedule | null | 'conflict' {
+    this.validate(input);
     const changes = this.db
       .prepare(
-        'UPDATE schedules SET name = ?, cron = ?, entity_id = ?, value = ?, enabled = ?, version = version + 1, updated_at = ? WHERE schedule_id = ?',
+        'UPDATE schedules SET name = ?, cron = ?, entity_id = ?, value = ?, enabled = ?, version = version + 1, updated_at = ? WHERE schedule_id = ? AND version = ?',
       )
-      .run(input.name, input.cron, input.entityId, input.value ? 1 : 0, input.enabled ? 1 : 0, Date.now(), id).changes;
-    if (!changes) return null;
+      .run(input.name, input.cron, input.entityId, input.value ? 1 : 0, input.enabled ? 1 : 0, Date.now(), id, version).changes;
+    if (!changes) return this.get(id) ? 'conflict' : null;
     const s = this.get(id)!;
     this.arm(s);
     return s;
@@ -106,9 +114,11 @@ export class Scheduler {
     this.commands.submit({ commandId, entityId: s.entityId, value: s.value, source: 'schedule' });
   }
 
-  private validate(expr: string): void {
+  private validate(input: ScheduleInput): void {
+    const target = switchTargetError(this.db, input.entityId);
+    if (target) throw new InvalidScheduleError(target);
     try {
-      new Cron(expr, { paused: true, timezone: this.timezone }).stop();
+      new Cron(input.cron, { paused: true, timezone: this.timezone }).stop();
     } catch (err) {
       throw new InvalidScheduleError(`invalid cron expression: ${(err as Error).message}`);
     }
