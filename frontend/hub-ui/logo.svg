@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 220" role="img" aria-label="VOLTAX">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 220" role="img" aria-label="VOLTEX">
   <defs>
     <linearGradient id="bolt" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#4FC3F1"/>
@@ -15,5 +15,5 @@
   <path d="M236 6 L150 120 L206 120 L226 92 Z" fill="url(#facet)"/>
   <text x="210" y="168" text-anchor="middle"
         font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
-        font-size="76" font-weight="800" letter-spacing="14" fill="#1F2A4D">VOLTAX</text>
+        font-size="76" font-weight="800" letter-spacing="14" fill="#1F2A4D">VOLTEX</text>
 </svg>

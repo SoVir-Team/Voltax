@@ -1,14 +1,15 @@
-// VOLTAX service worker.
+// VOLTEX service worker.
 // - App shell: cached, so the app opens instantly and works offline.
 // - API (/api/...): NEVER cached. Device state must always be live from the hub,
 //   so the app can never show a stale "on" for a light that is off.
-const CACHE = 'voltax-shell-v1';
+const CACHE = 'voltax-shell-v2'; // bump on every UI release so installed apps refresh
 const SHELL = [
   './',
   'index.html',
   'styles.css',
   'app.js',
   'logo.svg',
+  'logo-wordmark.svg',
   'manifest.webmanifest',
   'icon-192.png',
   'icon-512.png',

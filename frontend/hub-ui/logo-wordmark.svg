@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 64" role="img" aria-label="VOLTEX">
+  <defs>
+    <linearGradient id="bolt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4FC3F1"/>
+      <stop offset="0.55" stop-color="#1FA9E1"/>
+      <stop offset="1" stop-color="#0B8CC8"/>
+    </linearGradient>
+  </defs>
+  <!-- horizontal lockup for small sizes (top bar): bolt beside the wordmark so it stays legible -->
+  <path d="M27 2 L6 34 L20 34 L13 62 L40 26 L26 26 L35 2 Z" fill="url(#bolt)"/>
+  <text x="54" y="45" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="38" font-weight="800" letter-spacing="7" fill="#1F2A4D">VOLTEX</text>
+</svg>

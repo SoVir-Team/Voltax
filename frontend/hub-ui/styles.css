@@ -1,4 +1,4 @@
-/* VOLTAX home UI. White theme, colours taken from the logo, Apple-style feel. */
+/* VOLTEX home UI. White theme, colours taken from the logo, Apple-style feel. */
 :root {
   --navy: #1f2a4d;
   --navy-2: #46507a;
@@ -52,7 +52,7 @@ a { color: var(--sky-deep); text-decoration: none; }
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   mask-image: linear-gradient(#000 85%, transparent);
 }
-.topbar-logo { height: 34px; width: auto; }
+.topbar-logo { height: 26px; width: auto; }
 
 .conn {
   display: inline-flex; align-items: center; gap: 8px;

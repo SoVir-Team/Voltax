@@ -1,7 +1,7 @@
 {
-  "name": "VOLTAX Home",
-  "short_name": "VOLTAX",
-  "description": "Control your VOLTAX smart home, even when the internet is down.",
+  "name": "VOLTEX Home",
+  "short_name": "VOLTEX",
+  "description": "Control your VOLTEX smart home, even when the internet is down.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

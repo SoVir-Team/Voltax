@@ -1,4 +1,4 @@
-// VOLTAX hub UI. Talks only to the local hub API (/api/v1) and its WebSocket.
+// VOLTEX hub UI. Talks only to the local hub API (/api/v1) and its WebSocket.
 // It always renders the state the DEVICE REPORTED, never the state it asked for.
 
 const API = '/api/v1';
@@ -219,7 +219,7 @@ function viewPair() {
       localStorage.setItem(ROLE_KEY, data.role);
       localStorage.setItem(CLIENT_KEY, data.clientId);
       state.clientId = data.clientId;
-      toast('Connected to your VOLTAX hub');
+      toast('Connected to your VOLTEX hub');
       start();
     } catch (err) {
       toast(err.status === 429 ? 'Too many attempts. Wait 15 minutes and try again.' : 'That code is invalid or has expired.', 'error');
@@ -234,7 +234,7 @@ function viewPair() {
   );
   return h('div', { class: 'pair' },
     h('div', { class: 'card pair-card' },
-      h('img', { src: 'logo.svg', alt: 'VOLTAX' }),
+      h('img', { src: 'logo.svg', alt: 'VOLTEX' }),
       h('h1', { class: 'title' }, 'Connect to your home'),
       h('p', { class: 'muted' }, `Enter the one-time code from your installer or from the owner’s app. Codes expire after a few minutes and work once.`),
       state.hub ? h('p', { class: 'small muted' }, `Hub ${state.hub.name} · ${state.hub.hubId}`) : null,
@@ -561,7 +561,7 @@ function viewHub() {
         h('div', { class: 'row' }, h('div', { class: 'row-main' }, h('p', { class: 'row-sub', style: 'margin:0' }, k), h('p', { class: 'row-title' }, v)))))),
       h('div', { class: 'card' },
         h('h2', { style: 'margin:0 0 8px;font-size:1.1875rem' }, 'Add a device'),
-        h('p', { class: 'muted small' }, 'New VOLTAX switches are added by your installer. Each device gets its own secure credential on this hub, then appears here automatically once it reports in.'),
+        h('p', { class: 'muted small' }, 'New VOLTEX switches are added by your installer. Each device gets its own secure credential on this hub, then appears here automatically once it reports in.'),
         h('ol', { class: 'small', style: 'padding-left:18px;color:var(--navy-2)' },
           h('li', {}, 'Installer runs add-device on the hub'),
           h('li', {}, 'Installer flashes the switch with its credential'),
@@ -639,13 +639,13 @@ function installCard({ compact = false } = {}) {
         pwa.prompt.prompt();
         const { outcome } = await pwa.prompt.userChoice;
         pwa.prompt = null;
-        if (outcome === 'accepted') toast('VOLTAX added to your home screen');
+        if (outcome === 'accepted') toast('VOLTEX added to your home screen');
         render();
       } }, 'Install app')
     : h('p', { class: 'small muted', style: 'margin:0' }, 'Tap Share, then “Add to Home Screen”.');
   return h('div', { class: 'card install' },
     h('img', { src: 'icon-192.png', alt: '', width: '44', height: '44' }),
-    h('div', { class: 'row-main' }, h('p', { class: 'row-title' }, 'Get the VOLTAX app'), h('p', { class: 'row-sub' }, 'Opens full-screen, right from your home screen.')),
+    h('div', { class: 'row-main' }, h('p', { class: 'row-title' }, 'Get the VOLTEX app'), h('p', { class: 'row-sub' }, 'Opens full-screen, right from your home screen.')),
     body,
     compact ? null : h('button', { class: 'icon-btn', 'aria-label': 'Not now', html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>', onclick: () => {
       localStorage.setItem('voltax.installDismissed', '1');
@@ -673,7 +673,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       const next = reg.installing;
       next?.addEventListener('statechange', () => {
         if (next.state === 'installed' && navigator.serviceWorker.controller) {
-          toast('A new version of VOLTAX is ready. Refreshing…');
+          toast('A new version of VOLTEX is ready. Refreshing…');
           next.postMessage('skip-waiting');
         }
       });
