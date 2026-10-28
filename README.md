@@ -1,6 +1,6 @@
 # VOLTEX Home Automation
 
-Local-first smart home platform by SoVir Technologies. Each home has a Raspberry Pi hub that runs
+Local-first smart home platform by VOLTEX. Each home has a Raspberry Pi hub that runs
 everything locally and keeps working with the internet down. ESP32 switches talk to it over MQTT.
 The cloud (later milestones) adds remote access and fleet management.
 
