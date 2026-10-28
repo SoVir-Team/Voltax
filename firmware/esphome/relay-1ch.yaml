@@ -1,0 +1,86 @@
+# VOLTEX 1-channel relay: ESP32 dev board + relay module + wall push button.
+# NOT YET TESTED ON HARDWARE. Use a low-voltage test load until an electrician signs off mains wiring.
+#
+# Wiring: relay IN -> GPIO26, relay VCC -> 5V, GND -> GND; push button between GPIO27 and GND.
+# Topics (must match shared/contracts/src/topics.ts):
+#   voltax/<hub_id>/<device_id>/status                       online | offline (retained birth/will)
+#   voltax/<hub_id>/<device_id>/switch/relay_1/state         ON | OFF (retained)
+#   voltax/<hub_id>/<device_id>/switch/relay_1/command       ON | OFF (from the hub, never retained)
+#   voltax/<hub_id>/<device_id>/binary_sensor/boot_button/state
+
+substitutions:
+  device_id: esp-relay-01 # must equal the MQTT username created by: sudo add-device esp-relay-01
+  hub_id: voltax-hub-001
+
+esphome:
+  name: ${device_id}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf # required later for MQTT over TLS (port 8883)
+
+logger:
+  level: INFO
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # No fallback hotspot: if Wi-Fi is down the wall button still switches the relay locally.
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# No `api:` block on purpose: devices talk to the hub over MQTT only.
+
+mqtt:
+  broker: !secret mqtt_broker
+  port: 1883 # LAN only; plaintext is a prototype limitation (SECURITY.md)
+  username: ${device_id}
+  password: !secret mqtt_password
+  client_id: ${device_id}
+  topic_prefix: voltax/${hub_id}/${device_id}
+  discovery: false
+  log_topic: null
+  birth_message:
+    topic: voltax/${hub_id}/${device_id}/status
+    payload: online
+    retain: true
+  will_message:
+    topic: voltax/${hub_id}/${device_id}/status
+    payload: offline
+    retain: true
+
+switch:
+  - platform: gpio
+    id: relay_1
+    name: relay_1 # object id "relay_1" -> entity <device_id>.switch.relay_1
+    pin: GPIO26
+    restore_mode: RESTORE_DEFAULT_OFF # after power loss: last state from flash, OFF if unknown
+
+binary_sensor:
+  # Wall push button: toggles the relay on the ESP32 itself, so it works without the hub.
+  # For a latching rocker switch use `on_state:` instead of `on_press:`.
+  - platform: gpio
+    id: wall_switch
+    internal: true
+    pin:
+      number: GPIO27
+      mode: INPUT_PULLUP
+      inverted: true
+    filters:
+      - delayed_on_off: 30ms
+    on_press:
+      - switch.toggle: relay_1
+
+  # BOOT button: published only, to test a hub-side automation ("pressed -> relay on for 60 s").
+  - platform: gpio
+    id: boot_button
+    name: boot_button
+    pin:
+      number: GPIO0
+      mode: INPUT_PULLUP
+      inverted: true
+    filters:
+      - delayed_on_off: 30ms
