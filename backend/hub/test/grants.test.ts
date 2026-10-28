@@ -284,7 +284,10 @@ describe('revocation and commands in flight', () => {
     const second = command(grantId, false);
     // Grant ended by some path that does not cancel the queue (e.g. a crash mid-revoke).
     env.hub.db.prepare("UPDATE support_grants SET status = 'revoked' WHERE grant_id = ?").run(grantId);
-    await waitFor(() => env.hub.commands.get(second)?.status === 'failed', 15_000);
+    // The relay now confirms the first command, so the second is dispatched at once (long before
+    // its own deadline; waiting out the first one's TTL raced the second's expiry on slow runners).
+    await env.device.setRelay(true);
+    await waitFor(() => env.hub.commands.get(second)?.status === 'failed');
     expect(env.hub.commands.get(second)?.reason).toBe('grant no longer valid: grant revoked');
     expect(env.device.received.filter((r) => r.topic.endsWith('/command')).map((r) => r.payload)).toEqual(['ON']);
   }, 20_000);
