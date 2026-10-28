@@ -36,6 +36,8 @@ interface HubContextValue {
   api<T>(path: string, options?: ApiOptions): Promise<ApiResponse<T>>;
   sendCommand(entityId: string, value: boolean): Promise<void>;
   refresh(): Promise<void>;
+  /** Every live hub event (screens refetch what they show, e.g. support sessions). */
+  onEvent(listener: (event: HubEvent) => void): () => void;
   signIn(result: PairResult): void;
   signOut(message?: string): void;
 }
@@ -62,6 +64,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const pendingRef = useRef(new Map<string, string>()); // entityId -> commandId
   const devicesRef = useRef<DeviceView[]>([]);
   const lastSeq = useRef(0);
+  const listeners = useRef(new Set<(event: HubEvent) => void>());
   devicesRef.current = devices;
 
   const setPendingCommand = useCallback((entityId: string, commandId: string | null) => {
@@ -106,9 +109,12 @@ export function HubProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [d, h] = await Promise.all([api<DeviceView[]>('/devices'), api<HealthView>('/health')]);
+      const [d, h, me] = await Promise.all([api<DeviceView[]>('/devices'), api<HealthView>('/health'), api<{ role: Role; clientId: string }>('/me')]);
       setDevices(d.data);
       setHealth(h.data);
+      // The owner may have promoted or demoted this browser: the hub's answer wins over the saved one.
+      localStorage.setItem(STORAGE.role, me.data.role);
+      setSession((s) => (s && s.role !== me.data.role ? { ...s, role: me.data.role } : s));
     } catch (err) {
       if (!(err instanceof ApiError && err.status === 401)) setConn('offline');
     }
@@ -150,6 +156,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const applyEvent = useCallback(
     (ev: HubEvent) => {
       lastSeq.current = Math.max(lastSeq.current, ev.seq);
+      for (const listener of listeners.current) listener(ev);
       const p = ev.payload;
       if (ev.type === 'entity.state') {
         const known = devicesRef.current.some((d) => d.entities.some((e) => e.entityId === p.entityId));
@@ -223,6 +230,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
     };
   }, [token, applyEvent, refresh, signOut]);
 
+  const onEvent = useCallback((listener: (event: HubEvent) => void) => {
+    listeners.current.add(listener);
+    return () => void listeners.current.delete(listener);
+  }, []);
+
   const value = useMemo<HubContextValue>(
     () => ({
       ready,
@@ -237,10 +249,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
       api,
       sendCommand,
       refresh,
+      onEvent,
       signIn,
       signOut,
     }),
-    [ready, session, hub, health, devices, conn, pending, failures, api, sendCommand, refresh, signIn, signOut],
+    [ready, session, hub, health, devices, conn, pending, failures, api, sendCommand, refresh, onEvent, signIn, signOut],
   );
 
   return <HubContext.Provider value={value}>{children}</HubContext.Provider>;

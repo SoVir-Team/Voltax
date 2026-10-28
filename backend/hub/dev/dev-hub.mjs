@@ -2,6 +2,9 @@
 // simulated ESPHome devices, serving the UI from frontend/web/out (npm run build -w frontend/web) over plain HTTP
 // on localhost (a secure context, so the PWA service worker works).
 //   npm run dev -w backend/hub        then open http://localhost:8080
+// --demo: also plays the VOLTEX cloud with a throwaway signing key (made in memory, never saved):
+// a support request and a hub update offer arrive signed, so those screens can be tried locally.
+import { generateKeyPairSync, randomUUID, sign } from 'node:crypto';
 import { createServer } from 'node:net';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +13,8 @@ import mqtt from 'mqtt';
 import { createHub } from '../dist/hub.js';
 
 const HUB_ID = 'dev-hub';
+const DEMO = process.argv.includes('--demo');
+const cloudKey = DEMO ? generateKeyPairSync('ed25519') : null;
 const PORT = Number(process.env.PORT ?? 8080);
 const MQTT_PORT = Number(process.env.MQTT_PORT ?? 18830);
 const dataDir = fileURLToPath(new URL('../.dev-data/', import.meta.url));
@@ -62,7 +67,9 @@ const hub = await createHub(
     MQTT_USERNAME: 'hub',
     MQTT_PASSWORD: 'dev',
     TZ: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    VOLTAX_VERSION: 'dev',
+    VOLTAX_VERSION: DEMO ? '1.0.0' : 'dev', // updates are offered only to release versions
+    CLOUD_COMMAND_PUBKEY_PEM: cloudKey ? cloudKey.publicKey.export({ type: 'spki', format: 'pem' }).toString() : null,
+    UPDATE_DIR: `${dataDir}update-request`,
     TIME_SYNC_FILE: process.platform === 'win32' ? 'C:\\Windows' : '/',
     UI_DIR: fileURLToPath(new URL('../../../frontend/web/out/', import.meta.url)),
   },
@@ -70,6 +77,33 @@ const hub = await createHub(
 );
 await hub.start();
 await hub.app.listen({ host: '127.0.0.1', port: PORT });
+
+if (cloudKey) {
+  const actor = (role, displayName) => ({ staffId: randomUUID(), role, displayName });
+  const send = (body, who) => {
+    const now = Date.now();
+    const payload = JSON.stringify({ v: 1, envelopeId: randomUUID(), hubId: HUB_ID, issuedAt: now, expiresAt: now + 60_000, actor: who, ...body });
+    hub.grants.handle({ payload, sig: sign(null, Buffer.from(payload), cloudKey.privateKey).toString('base64') });
+  };
+  const now = Date.now();
+  send(
+    {
+      type: 'grant.request',
+      grant: {
+        grantId: randomUUID(),
+        deviceIds: ['kitchen'],
+        actions: ['device.command', 'diagnostics.read'],
+        reason: 'Customer reports the kitchen lights do not respond',
+        ticketRef: 'VTX-1042',
+        startsAt: now,
+        endsAt: now + 60 * 60_000,
+      },
+    },
+    actor('PLATFORM_SUPPORT', 'Priya (VOLTEX support)'),
+  );
+  send({ type: 'hub.update', rolloutId: randomUUID(), version: '1.1.0' }, actor('PLATFORM_SUPER_ADMIN', 'Release team'));
+  console.log('demo: a support request and a hub update offer are waiting for the owner');
+}
 
 const { code } = hub.auth.createPairingCode('owner', 60 * 60 * 1000);
 console.log(`\nVOLTAX dev hub: http://localhost:${PORT}`);

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icon, strokeIcon } from '@/components/Icon';
 import { ScheduleList } from '@/features/schedules/ScheduleList';
-import { pretty, roomName, since } from '@/lib/format';
+import { pretty, roomOf, since } from '@/lib/format';
 import { useEntities, useHub } from '@/providers/HubProvider';
 import { stateLabel } from './DeviceTile';
 import { RenameForm } from './RenameForm';
@@ -58,7 +58,7 @@ export function DeviceScreen() {
             </div>
           )}
           <p className="small muted" style={{ textAlign: 'center' }}>
-            {roomName(entity.device)} · {online ? 'Online' : 'Offline'}
+            {roomOf(entity.device)} · {online ? 'Online' : 'Offline'}
           </p>
           {isOwner && <RenameForm entity={entity} />}
         </div>

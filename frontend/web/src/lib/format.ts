@@ -51,3 +51,50 @@ export const formatPairingCode = (code: string): string => `${code.slice(0, 5)}-
 export function formatUptime(seconds: number): string {
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
+
+/** The room a device is shown under: the owner's room label, else the device name as before. */
+export const roomOf = (d: Pick<DeviceView, 'name' | 'deviceId' | 'room'>): string => d.room ?? roomName(d);
+
+export type DeviceFilter = 'all' | 'on' | 'off' | 'offline';
+
+interface Findable {
+  name: string;
+  component: string;
+  state: boolean | null;
+  device: Pick<DeviceView, 'name' | 'deviceId' | 'room' | 'online'>;
+}
+
+/** Search matches the device name or its room; the filter looks at the reported state. */
+export function matchesDevice(e: Findable, query: string, filter: DeviceFilter): boolean {
+  const q = query.trim().toLowerCase();
+  if (q && !`${pretty(e.name)} ${roomOf(e.device)}`.toLowerCase().includes(q)) return false;
+  if (filter === 'offline') return !e.device.online;
+  if (filter === 'on') return e.device.online && e.component === 'switch' && e.state === true;
+  if (filter === 'off') return e.device.online && e.component === 'switch' && e.state !== true;
+  return true;
+}
+
+/** Groups items by room, rooms in alphabetical order, keeping each room's item order. */
+export function groupByRoom<T extends { device: Pick<DeviceView, 'name' | 'deviceId' | 'room'> }>(items: T[]): Array<[string, T[]]> {
+  const rooms = new Map<string, T[]>();
+  for (const item of items) {
+    const room = roomOf(item.device);
+    rooms.set(room, [...(rooms.get(room) ?? []), item]);
+  }
+  return [...rooms.entries()].sort(([a], [b]) => a.localeCompare(b));
+}
+
+/** Plain words for what a support grant allows (shown to the owner before approving). */
+export const GRANT_ACTION_LABEL: Record<string, string> = {
+  'device.command': 'Turn the chosen devices on and off',
+  'diagnostics.read': 'See hub health (no device states or history)',
+  'activity.read': 'See recent activity of the chosen devices',
+  'hub.restart': 'Restart the hub',
+};
+
+/** "2 h 05 min" / "12 min" / "less than a minute" until `endsAt`. */
+export function timeLeft(endsAt: number, now = Date.now()): string {
+  const min = Math.floor((endsAt - now) / 60_000);
+  if (min < 1) return 'less than a minute';
+  return min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min` : `${min} min`;
+}

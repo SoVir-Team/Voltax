@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 8080
+    },
+    {
+      "name": "voltax-dev-hub-demo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["backend/hub/dev/dev-hub.mjs", "--demo"],
+      "port": 8080
     }
   ]
 }

@@ -1,23 +1,24 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { pretty, roomName } from '@/lib/format';
+import { pretty } from '@/lib/format';
 import { useHub, type EntityWithDevice } from '@/providers/HubProvider';
 import { useToast } from '@/providers/ToastProvider';
 
-/** Owner-only: rename the device and its room (stored on the hub). */
+/** Owner-only: rename the control and choose its device's room (both stored on the hub). */
 export function RenameForm({ entity }: { entity: EntityWithDevice }) {
-  const { api, refresh } = useHub();
+  const { api, refresh, devices } = useHub();
+  const rooms = [...new Set(devices.map((d) => d.room).filter((r): r is string => !!r))].sort();
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(pretty(entity.name));
-  const [room, setRoom] = useState(roomName(entity.device));
+  const [room, setRoom] = useState(entity.device.room ?? '');
 
   async function save(e: FormEvent) {
     e.preventDefault();
     try {
       await api(`/entities/${encodeURIComponent(entity.entityId)}`, { method: 'PATCH', body: { name } });
-      await api(`/devices/${encodeURIComponent(entity.deviceId)}`, { method: 'PATCH', body: { name: room } });
+      await api(`/devices/${encodeURIComponent(entity.deviceId)}/room`, { method: 'PUT', body: { room: room.trim() || null } });
       toast('Saved');
       await refresh();
     } catch (err) {
@@ -36,7 +37,12 @@ export function RenameForm({ entity }: { entity: EntityWithDevice }) {
             </label>
             <label className="field">
               Room
-              <input value={room} maxLength={64} required onChange={(e) => setRoom(e.target.value)} />
+              <input value={room} maxLength={40} placeholder="e.g. Kitchen" list="voltax-rooms" onChange={(e) => setRoom(e.target.value)} />
+              <datalist id="voltax-rooms">
+                {rooms.map((r) => (
+                  <option key={r} value={r} />
+                ))}
+              </datalist>
             </label>
           </div>
           <button className="btn sm" type="submit">
@@ -45,7 +51,7 @@ export function RenameForm({ entity }: { entity: EntityWithDevice }) {
         </form>
       ) : (
         <button className="btn ghost sm" type="button" onClick={() => setOpen(true)}>
-          Rename
+          Rename or move to a room
         </button>
       )}
     </div>

@@ -50,3 +50,27 @@ self.addEventListener('fetch', (event) => {
     }),
   );
 });
+
+// Notifications from the hub (support access, offline devices, update offers). The payload is
+// plain text the hub chose; tapping it opens the matching screen of this app.
+self.addEventListener('push', (event) => {
+  let msg = { title: 'VOLTEX', body: '', url: '/' };
+  try {
+    msg = { ...msg, ...event.data.json() };
+  } catch {
+    /* not JSON: keep the default */
+  }
+  event.waitUntil(self.registration.showNotification(msg.title, { body: msg.body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url: msg.url } }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url ?? '/', location.origin);
+  if (url.origin !== location.origin) return; // only ever open this app
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      const open = wins.find((w) => new URL(w.url).origin === location.origin);
+      return open ? open.navigate(url.href).then((w) => w?.focus()) : self.clients.openWindow(url.href);
+    }),
+  );
+});

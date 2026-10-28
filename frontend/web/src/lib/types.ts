@@ -2,7 +2,12 @@
 import type { AutomationInput, Role, ScheduleInput } from '@voltax/contracts';
 
 export type {
+  ClientView,
   CommandView,
+  DeviceGrantInput,
+  GrantView,
+  HubUpdatesView,
+  UpdatePolicy,
   DeviceView,
   EntityView,
   HealthView,

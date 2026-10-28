@@ -31,7 +31,9 @@ export function PairScreen() {
     <div className="pair">
       <div className="card pair-card">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/logo.svg" alt="VOLTEX" />
+        <img className="for-light" src="/brand/logo.svg" alt="VOLTEX" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="for-dark" src="/brand/logo-dark.svg" alt="VOLTEX" />
         <h1 className="title">Connect to your home</h1>
         <p className="muted">Enter the one-time code from your installer or from the owner’s app. Codes expire after a few minutes and work once.</p>
         {hub && (

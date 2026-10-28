@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { PairScreen } from '@/features/pairing/PairScreen';
+import { SupportBanner } from '@/features/support/SupportBanner';
 import { useHub, type Connection } from '@/providers/HubProvider';
 import { Icon, type IconName } from './Icon';
 
@@ -32,12 +33,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="app">
       <header className="topbar">
         {/* eslint-disable-next-line @next/next/no-img-element -- static export, no image optimiser */}
-        <img className="topbar-logo" src="/brand/logo-wordmark.svg" alt="VOLTEX" />
+        <img className="topbar-logo for-light" src="/brand/logo-wordmark.svg" alt="VOLTEX" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="topbar-logo for-dark" src="/brand/logo-wordmark-dark.svg" alt="VOLTEX" />
         <span className="conn" data-state={conn} role="status" aria-live="polite">
           <i />
           <span>{CONN_LABEL[conn]}</span>
         </span>
       </header>
+      <SupportBanner />
 
       {/* key: replay the entrance animation on every route change */}
       <main key={pathname} className="view enter" tabIndex={-1}>

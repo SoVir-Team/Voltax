@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cronLabel, dailyCron, formatTime12, from24h, pretty, roomName, since, to24h } from './format';
+import { cronLabel, dailyCron, formatTime12, from24h, groupByRoom, matchesDevice, pretty, roomName, roomOf, since, timeLeft, to24h } from './format';
 
 describe('12-hour time', () => {
   it.each([
@@ -41,5 +41,41 @@ describe('names and relative time', () => {
     expect(since(now - 3_000, now)).toBe('just now');
     expect(since(now - 30_000, now)).toBe('30s ago');
     expect(since(now - 600_000, now)).toBe('10m ago');
+  });
+});
+
+describe('rooms, search and filters', () => {
+  const dev = (deviceId: string, room: string | null, online = true) => ({ deviceId, name: deviceId, room, online });
+  const e = (name: string, device: ReturnType<typeof dev>, state: boolean | null = false, component = 'switch') => ({ name, component, state, device });
+
+  it('uses the room label when set, the device name otherwise', () => {
+    expect(roomOf(dev('esp-relay-01', 'Kitchen'))).toBe('Kitchen');
+    expect(roomOf(dev('esp-relay-01', null))).toBe('Esp Relay 01');
+  });
+
+  it('searches names and rooms, and filters by reported state', () => {
+    const lamp = e('relay_1', dev('a', 'Living room'), true);
+    const fan = e('fan', dev('b', 'Bedroom', false), false);
+    expect(matchesDevice(lamp, 'living', 'all')).toBe(true);
+    expect(matchesDevice(lamp, 'RELAY', 'all')).toBe(true);
+    expect(matchesDevice(fan, 'living', 'all')).toBe(false);
+    expect(matchesDevice(lamp, '', 'on')).toBe(true);
+    expect(matchesDevice(lamp, '', 'off')).toBe(false);
+    expect(matchesDevice(fan, '', 'offline')).toBe(true);
+    expect(matchesDevice(fan, '', 'off')).toBe(false); // offline is not "off": the state is unknown
+  });
+
+  it('groups by room in alphabetical order, several devices per room', () => {
+    const items = [e('x', dev('a', 'Kitchen')), e('y', dev('b', 'Bedroom')), e('z', dev('c', 'Kitchen'))];
+    expect(groupByRoom(items).map(([room, list]) => [room, list.map((i) => i.name)])).toEqual([
+      ['Bedroom', ['y']],
+      ['Kitchen', ['x', 'z']],
+    ]);
+  });
+
+  it('time left on a support session', () => {
+    expect(timeLeft(125 * 60_000, 0)).toBe('2 h 05 min');
+    expect(timeLeft(12 * 60_000 + 5, 0)).toBe('12 min');
+    expect(timeLeft(30_000, 0)).toBe('less than a minute');
   });
 });

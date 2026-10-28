@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { InstallCard } from '@/components/InstallCard';
-import { roomName } from '@/lib/format';
+import { groupByRoom, matchesDevice, type DeviceFilter } from '@/lib/format';
 import { useEntities, useHub } from '@/providers/HubProvider';
 import { DeviceTile } from './DeviceTile';
 
@@ -11,13 +12,23 @@ function greeting(hour: number) {
   return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 }
 
-/** Summary card and every device, grouped by room. */
+const FILTERS: [DeviceFilter, string][] = [
+  ['all', 'All'],
+  ['on', 'On'],
+  ['off', 'Off'],
+  ['offline', 'Offline'],
+];
+
+/** Summary card and every device, grouped by room, with search and filters. */
 export function HomeScreen() {
   const { devices, health } = useHub();
   const entities = useEntities();
   const switches = entities.filter((e) => e.component === 'switch');
   const online = devices.filter((d) => d.online).length;
   const onCount = switches.filter((e) => e.state === true).length;
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<DeviceFilter>('all');
+  const rooms = groupByRoom(entities.filter((e) => matchesDevice(e, query, filter)));
 
   return (
     <div>
@@ -49,21 +60,41 @@ export function HomeScreen() {
       <InstallCard />
 
       {entities.length ? (
-        devices
-          .filter((d) => d.entities.length)
-          .map((d) => (
-            <section key={d.deviceId}>
-              <div className="section-title">
-                <h2>{roomName(d)}</h2>
-                <span>{d.online ? `${d.entities.length} ${d.entities.length === 1 ? 'device' : 'devices'}` : 'Offline'}</span>
-              </div>
-              <div className="grid">
-                {d.entities.map((e) => (
-                  <DeviceTile key={e.entityId} entity={{ ...e, device: d }} />
-                ))}
-              </div>
-            </section>
-          ))
+        <>
+          <div className="finder">
+            <label className="search">
+              <span className="sr-only">Search devices and rooms</span>
+              <input type="search" placeholder="Search devices or rooms" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </label>
+            <div className="segmented" role="radiogroup" aria-label="Show">
+              {FILTERS.map(([value, label]) => (
+                <button key={value} role="radio" aria-checked={filter === value} className={filter === value ? 'on' : ''} onClick={() => setFilter(value)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {rooms.length === 0 && <div className="card empty small">Nothing matches. Try another word or filter.</div>}
+          {rooms.map(([room, list]) => {
+            const offline = list.filter((e) => !e.device.online).length;
+            return (
+              <section key={room}>
+                <div className="section-title">
+                  <h2>{room}</h2>
+                  <span>
+                    {list.length} {list.length === 1 ? 'device' : 'devices'}
+                    {offline ? ` · ${offline} offline` : ''}
+                  </span>
+                </div>
+                <div className="grid">
+                  {list.map((e) => (
+                    <DeviceTile key={e.entityId} entity={e} />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </>
       ) : (
         <>
           <div className="section-title">
