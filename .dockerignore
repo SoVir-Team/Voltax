@@ -10,3 +10,6 @@ firmware
 deploy
 **/*.env
 **/secrets.yaml
+**/.next
+**/out
+**/next-env.d.ts

@@ -3,13 +3,16 @@
   "private": true,
   "workspaces": [
     "shared/contracts",
-    "backend/hub"
+    "backend/hub",
+    "frontend/web"
   ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "build": "npm run build --workspaces",
+    "dev": "npm run build -w frontend/web && npm run dev -w backend/hub",
+    "dev:web": "npm run dev -w frontend/web",
     "typecheck": "npm run build -w shared/contracts && npm run typecheck --workspaces",
     "test": "npm run build -w shared/contracts && npm run test --workspaces --if-present"
   }

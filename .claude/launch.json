@@ -4,7 +4,7 @@
     {
       "name": "voltax-dev-hub",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "backend/hub"],
+      "runtimeArgs": ["run", "dev"],
       "port": 8080
     }
   ]

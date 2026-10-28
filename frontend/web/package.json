@@ -1,0 +1,26 @@
+{
+  "name": "@voltax/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "VOLTEX web app + PWA (Next.js, static export served by the hub)",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build && node scripts/postbuild.mjs",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "next": "^16.4.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@voltax/contracts": "0.1.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.5"
+  }
+}

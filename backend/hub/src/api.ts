@@ -203,9 +203,10 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     });
   });
 
-  // Installer / diagnostics page (frontend/hub-ui). Customers use the app, not this page.
+  // Web app: the static Next.js export of frontend/web (one index.html per route, e.g. /schedules/).
+  // redirect: /schedules -> /schedules/ so typed or bookmarked URLs without the slash still work.
   if (deps.uiDir && existsSync(deps.uiDir)) {
-    await app.register(fastifyStatic, { root: deps.uiDir, prefix: '/' });
+    await app.register(fastifyStatic, { root: deps.uiDir, prefix: '/', redirect: true });
   }
 
   return app;

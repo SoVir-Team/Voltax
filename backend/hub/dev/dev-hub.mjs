@@ -1,5 +1,5 @@
 // Development only: runs the real hub against an in-memory MQTT broker and
-// simulated ESPHome devices, serving the UI from frontend/hub-ui over plain HTTP
+// simulated ESPHome devices, serving the UI from frontend/web/out (npm run build -w frontend/web) over plain HTTP
 // on localhost (a secure context, so the PWA service worker works).
 //   npm run dev -w backend/hub        then open http://localhost:8080
 import { createServer } from 'node:net';
@@ -64,7 +64,7 @@ const hub = await createHub(
     TZ: Intl.DateTimeFormat().resolvedOptions().timeZone,
     VOLTAX_VERSION: 'dev',
     TIME_SYNC_FILE: process.platform === 'win32' ? 'C:\\Windows' : '/',
-    UI_DIR: fileURLToPath(new URL('../../../frontend/hub-ui/', import.meta.url)),
+    UI_DIR: fileURLToPath(new URL('../../../frontend/web/out/', import.meta.url)),
   },
   { logger: { level: 'warn' } },
 );
