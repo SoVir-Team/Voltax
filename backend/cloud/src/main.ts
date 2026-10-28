@@ -11,12 +11,14 @@ const config = loadCloudConfig();
 const readKey = (file: string) => (existsSync(file) ? readFileSync(file, 'utf8') : undefined);
 const commandKeyPem = readKey(config.COMMAND_KEY_FILE);
 const auditKeyPem = readKey(config.AUDIT_KEY_FILE);
+const releasePublicKey = readKey(config.RELEASE_PUBKEY_FILE);
 
 /** Which optional parts are on (names only; values never reach the log). */
 function features(c: CloudConfig) {
   return {
     commands: Boolean(commandKeyPem),
     auditCheckpoints: Boolean(auditKeyPem),
+    releases: Boolean(releasePublicKey),
     broker: Boolean(c.CLOUD_BROKER_URL),
     brokerAuthApi: c.INTERNAL_PORT > 0,
     email: Boolean(c.SMTP_URL),
@@ -30,6 +32,7 @@ const cloud = await createCloud({
   dataKey: parseDataKey(config.CLOUD_DATA_KEY),
   commandKeyPem,
   auditKeyPem,
+  releasePublicKey,
   migrate: config.MIGRATE_ON_START,
   api: {
     cookieSecure: config.COOKIE_SECURE,
@@ -52,6 +55,7 @@ const log = cloud.app.log;
 log.info({ features: features(config) }, 'cloud configured');
 if (!commandKeyPem) log.warn(`no command key at ${config.COMMAND_KEY_FILE}: support actions to hubs are disabled`);
 if (!auditKeyPem) log.warn(`no audit key at ${config.AUDIT_KEY_FILE}: audit checkpoints are not signed`);
+if (!releasePublicKey) log.warn(`no release public key at ${config.RELEASE_PUBKEY_FILE}: no release can be registered`);
 if (!config.SMTP_URL) log.warn('no SMTP_URL: owner email notices fail closed, so remote control stays blocked');
 
 const internal =

@@ -8,10 +8,12 @@ import { StaffPush, type PushSender } from './channels.js';
 import { AuditCheckpoints } from './checkpoints.js';
 import type { ScryptCost } from './crypto.js';
 import { migrate, type Db } from './db.js';
+import { FleetService } from './fleet.js';
 import { GrantService, type HubTransport } from './grants.js';
 import { HomesService } from './homes.js';
 import { HubAuditStore } from './hub-audit.js';
 import { Notifications, type EmailChannel } from './notifications.js';
+import { fleetRoutes } from './routes-fleet.js';
 import { supportRoutes } from './routes-support.js';
 import type { ObjectStore } from './s3.js';
 import { EnvelopeSigner } from './signer.js';
@@ -24,6 +26,8 @@ export interface CloudOptions {
   commandKeyPem?: string;
   /** Ed25519 private key (PEM) for audit checkpoints. Keep it apart from the database. */
   auditKeyPem?: string;
+  /** minisign public key (.pub file contents) that every registered release must be signed with. */
+  releasePublicKey?: string;
   api: CloudApiConfig;
   scryptCost?: ScryptCost;
   server?: FastifyServerOptions;
@@ -46,6 +50,7 @@ export interface Cloud {
   staff: StaffService;
   homes: HomesService;
   grants: GrantService;
+  fleet: FleetService;
   notifications: Notifications;
   hubAudit: HubAuditStore;
   checkpoints: AuditCheckpoints;
@@ -83,7 +88,9 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
       return broker.publish(hubId, env);
     },
   };
-  const grants = new GrantService(opts.db, audit, homes, notifications, signer, opts.broker || opts.transport ? transport : null);
+  const linked = opts.broker || opts.transport ? transport : null;
+  const grants = new GrantService(opts.db, audit, homes, notifications, signer, linked);
+  const fleet = new FleetService(opts.db, audit, signer, linked, opts.releasePublicKey ?? null);
 
   // Staff alerts when the owner decides or the session ends (best effort, never a gate).
   grants.onChange((g) => {
@@ -106,7 +113,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
         await hubAudit.ingest(hubId, msg.records);
         return;
       case 'update.status':
-        return; // fleet rollouts (P6)
+        return fleet.onUpdateStatus(hubId, msg);
       default:
         return grants.handleHubMessage(hubId, msg);
     }
@@ -121,7 +128,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
       homes,
       config: { ...opts.api, commandPublicKeyPem: signer?.publicKeyPem },
       verifyAudit: () => checkpoints.verify(checkpointPublicKeyPem),
-      plugins: [supportRoutes({ grants, notifications, homes, hubAudit, checkpoints, push })],
+      plugins: [supportRoutes({ grants, notifications, homes, hubAudit, checkpoints, push }), fleetRoutes(fleet)],
     },
     opts.server,
   );
@@ -135,6 +142,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
     staff,
     homes,
     grants,
+    fleet,
     notifications,
     hubAudit,
     checkpoints,
@@ -147,6 +155,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
     async start() {
       if (broker) await broker.start();
       grants.start();
+      fleet.start();
       notifications.start();
       // Retention (docs/security/data-classification.md): dead sessions and setup links, hourly.
       retentionTimer = setInterval(() => void staff.purgeExpired().catch(() => undefined), 60 * 60_000);
@@ -164,6 +173,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
       clearInterval(exportTimer);
       clearInterval(retentionTimer);
       grants.stop();
+      fleet.stop();
       notifications.stop();
       await broker?.stop();
       await app.close();

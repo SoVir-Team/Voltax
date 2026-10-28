@@ -179,9 +179,61 @@ Google/Mozilla/Apple push services (encryption and VAPID are checked by decrypti
 
 ## P6. Fleet
 
-- [ ] Telemetry ingestion (metadata only)
-- [ ] Rollout state machine (canary, thresholds, halt, rollback)
-- [ ] Firmware registry, minisign verification, compatibility checks
+- [x] Telemetry ingestion (metadata only): allow-listed telemetry (P3/P4) now feeds
+  `GET /api/v1/fleet/summary` (hub count, online, version and update-state counts, active
+  rollout; no device ids or household data, asserted in `fleet.test.ts`).
+- [x] Rollout state machine (canary, thresholds, halt, rollback)
+- [x] Firmware registry, minisign verification, compatibility checks
+- [x] Disruptive actions gated: hub restart only through an owner-approved grant (P2/P5); hub
+  updates only under the owner's local update policy (default: owner approves on the hub);
+  factory reset and owner promotion are `LOCAL_ONLY_ACTIONS` with no cloud route (the authz-matrix
+  coverage test fails on any unlisted cloud route).
+
+How it works:
+- **Release registry** (`backend/cloud/src/fleet.ts`, `routes-fleet.ts`, migration `003_fleet.sql`):
+  a release is accepted only with a valid minisign signature from the configured VOLTEX release
+  public key (`RELEASE_PUBKEY_FILE`). `src/minisign.ts` verifies in Node: Ed25519, BLAKE2b-512
+  prehash (`ED`) and legacy (`Ed`), key id, and the trusted-comment global signature. Fixtures were
+  produced by the real `minisign 0.11` in a throwaway container (`test/fixtures/minisign/README.md`;
+  the throwaway private key was discarded). The hub manifest must pin images by digest. Duplicates
+  → 409. Withdrawing a release halts its rollout. Every outcome is audited.
+- **Compatibility:** eligible only when the hub runs a release version older than the release and
+  at least `minFromVersion`; otherwise a stated reason.
+- **Rollouts:** stage 0 is one canary hub, then cumulative percentages (default 10/50/100) of
+  eligible hubs in a fixed per-rollout hash order. Each step:
+  - re-checks the acting admin (creator, or whoever resumed it) is still an active super admin, or
+    halts;
+  - halts on any canary failure, or when failed + rolled back exceed `maxFailureRate`;
+  - advances only after the health window, with nothing in progress, at least one healthy update,
+    and every `done` hub reporting the new version in telemetry (otherwise it counts as failed);
+  - owners who decline or have not decided do not block and are not failures.
+  Halt and cancel withdraw offers the owners have not decided (`hub.update.withdraw`). An offer
+  that cannot be delivered stays pending and is retried; unanswered offers are re-sent after
+  10 minutes. Only hubs actually offered a rollout can report status for it (a found-by-test fix).
+- **Hub side** (`backend/hub/src/updates.ts`, migration `004_update_offers.sql`): verifies the
+  signed `hub.update` (super admin only, release version, strictly newer, one version per rollout),
+  then applies the owner policy: `approve` (default) waits for the owner
+  (`POST /api/v1/updates/:rolloutId/approve|decline`, `update.manage`), `auto` requests at once.
+  Only then is the update request written for the root `voltax-update`, which re-verifies the
+  minisign signature and refuses downgrades itself. Results are reported once per state.
+- **ESP32 firmware:** registered and signature-checked with its board; a rollout is refused (409)
+  until OTA delivery is validated on hardware.
+
+Evidence (2026-10-28):
+- `npx vitest run test/fleet.test.ts` → 17/17 (registry, wrong key, edited manifest, unpinned
+  image, duplicate, roles, ESP32 blocked, compatibility reasons, canary, stage-by-stage to
+  completion with 3 `rollout.stage` audits, canary failure halt, threshold halt + withdraw,
+  decline not a failure, done-but-old-version, offline hub retried, demoted creator halts,
+  halt/resume/cancel audited, withdrawn release, foreign status ignored, summary minimal).
+- `minisign.test.ts` 4/4 (real minisign fixtures, prehashed and legacy, tamper and wrong key);
+  `shared/contracts` `updates.test.ts` 3/3; hub `update-offers.test.ts` 9/9.
+- `authz-matrix.test.ts` 189/189 (12 new fleet routes × 3 roles: super admin 2xx, support reads
+  only, installer reads releases only).
+- `npm run typecheck` clean; `npm test`: contracts 18, hub 95, cloud 300 + 11 skipped, web 10.
+- `npm run test:pg` (throwaway PostgreSQL 18 cluster): 307 passed + 4 skipped.
+
+Not verified here (hardware): an update applied on a real Pi through `voltax-update`, and any
+ESP32 OTA or secure boot.
 
 ## P7. Web apps (PWAs)
 

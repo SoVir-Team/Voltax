@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PLATFORM_ROLES, platformScope, type PlatformAction, type PlatformRole } from '@voltax/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { CloudGuard } from '../src/guard.js';
-import { PASSWORD, startCloud, type TestCloud, type TestStaff } from './helpers.js';
+import { hubRelease, PASSWORD, startCloud, type TestCloud, type TestStaff } from './helpers.js';
 
 // Every guarded route x every platform role x (assigned home, unassigned home), with the expected
 // outcome derived from shared/contracts permissions.ts. A new route without an entry here fails.
@@ -17,6 +17,18 @@ const grantUrl = async (h: string, staff: TestStaff, suffix = '') => `/api/v1/ho
 
 const freshStaff = async (role: PlatformRole = 'INSTALLER') =>
   (await c.staff.create({ email: `t-${randomUUID().slice(0, 8)}@voltex.test`, displayName: 'Target', role }, 'cli')).staff.staffId;
+
+// Fleet fixtures, created directly by the super admin so every role sees the same objects.
+let releaseN = 0;
+const sa = () => staffByRole.PLATFORM_SUPER_ADMIN.staffId;
+const freshRelease = async () => (await c.fleet.registerRelease(hubRelease(`3.0.${releaseN++}`), sa())).releaseId;
+const noActiveRollout = () => c.db.query("UPDATE rollouts SET status = 'cancelled' WHERE status IN ('running', 'halted')");
+const freshRollout = async (halted = false) => {
+  await noActiveRollout();
+  const r = await c.fleet.createRollout({ releaseId: await freshRelease(), stages: [10, 50, 100], maxFailureRate: 0.1, healthWindowMinutes: 60 }, sa());
+  if (halted) await c.fleet.halt(r.rolloutId, 'matrix test', 'system');
+  return r.rolloutId;
+};
 
 const ROUTES: Record<string, Build> = {
   'GET /api/v1/staff': async () => ({ url: '/api/v1/staff' }),
@@ -53,6 +65,21 @@ const ROUTES: Record<string, Build> = {
   'POST /api/v1/homes/:homeId/grants/:grantId/diagnostics': async (h, s) => ({ url: await grantUrl(h, s, '/diagnostics') }),
   'POST /api/v1/homes/:homeId/grants/:grantId/activity': async (h, s) => ({ url: await grantUrl(h, s, '/activity'), body: { sinceMinutes: 60 } }),
   'POST /api/v1/homes/:homeId/grants/:grantId/restart': async (h, s) => ({ url: await grantUrl(h, s, '/restart') }),
+  'GET /api/v1/fleet/summary': async () => ({ url: '/api/v1/fleet/summary' }),
+  'GET /api/v1/releases': async () => ({ url: '/api/v1/releases' }),
+  'POST /api/v1/releases': async () => ({ url: '/api/v1/releases', body: hubRelease(`3.0.${releaseN++}`) }),
+  'GET /api/v1/releases/:releaseId': async () => ({ url: `/api/v1/releases/${await freshRelease()}` }),
+  'GET /api/v1/releases/:releaseId/compatibility': async () => ({ url: `/api/v1/releases/${await freshRelease()}/compatibility` }),
+  'POST /api/v1/releases/:releaseId/withdraw': async () => ({ url: `/api/v1/releases/${await freshRelease()}/withdraw`, body: { reason: 'bad build' } }),
+  'GET /api/v1/rollouts': async () => ({ url: '/api/v1/rollouts' }),
+  'POST /api/v1/rollouts': async () => {
+    await noActiveRollout();
+    return { url: '/api/v1/rollouts', body: { releaseId: await freshRelease() } };
+  },
+  'GET /api/v1/rollouts/:rolloutId': async () => ({ url: `/api/v1/rollouts/${await freshRollout()}` }),
+  'POST /api/v1/rollouts/:rolloutId/halt': async () => ({ url: `/api/v1/rollouts/${await freshRollout()}/halt`, body: { reason: 'matrix test' } }),
+  'POST /api/v1/rollouts/:rolloutId/resume': async () => ({ url: `/api/v1/rollouts/${await freshRollout(true)}/resume`, body: { reason: 'matrix test' } }),
+  'POST /api/v1/rollouts/:rolloutId/cancel': async () => ({ url: `/api/v1/rollouts/${await freshRollout()}/cancel`, body: { reason: 'matrix test' } }),
 };
 
 beforeAll(async () => {

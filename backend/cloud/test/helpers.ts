@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign, type KeyObject } from 'node:crypto';
 import { cloudEnvelopeSchema, GRANT_ACTIONS, platformScope, type CloudEnvelope, type GrantAction, type PlatformRole, type SignedEnvelope } from '@voltax/contracts';
 import { SESSION_COOKIE, type CloudApiConfig } from '../src/api.js';
 import { createCloud, type Cloud, type CloudOptions } from '../src/cloud.js';
@@ -30,6 +30,39 @@ export function pgUrl(admin: string, database: string, user: string): string {
 
 export const PASSWORD = 'correct horse battery staple';
 
+// --- releases: a throwaway minisign-format release key (interop with the real tool is proven by
+// test/minisign.test.ts against signatures made by minisign 0.11) ------------------------------------
+export const releaseKey = generateKeyPairSync('ed25519');
+const RELEASE_KEY_ID = randomBytes(8);
+const rawPublic = (k: KeyObject) => Buffer.from(k.export({ format: 'jwk' }).x!, 'base64url');
+export const releasePublicKeyText = `untrusted comment: minisign public key (tests)\n${Buffer.concat([Buffer.from('Ed'), RELEASE_KEY_ID, rawPublic(releaseKey.publicKey)]).toString('base64')}\n`;
+
+/** Signs like `minisign -S` (prehashed). */
+export function minisignSign(message: string, trustedComment: string, key: KeyObject = releaseKey.privateKey, keyId: Buffer = RELEASE_KEY_ID): string {
+  const sig = sign(null, createHash('blake2b512').update(message).digest(), key);
+  const global = sign(null, Buffer.concat([sig, Buffer.from(trustedComment)]), key);
+  return ['untrusted comment: signature from minisign secret key', Buffer.concat([Buffer.from('ED'), keyId, sig]).toString('base64'), `trusted comment: ${trustedComment}`, global.toString('base64'), ''].join('\n');
+}
+
+const hex64 = (c: string) => c.repeat(64);
+/** A hub release as the release workflow produces it: release.json + its minisig. */
+export function hubRelease(version: string, opts: { minFromVersion?: string; key?: KeyObject } = {}) {
+  const manifest = JSON.stringify({
+    version,
+    hubImage: `ghcr.io/voltex/hub@sha256:${hex64('a')}`,
+    mosquittoImage: `eclipse-mosquitto@sha256:${hex64('b')}`,
+    composeSha256: hex64('c'),
+    commit: '0'.repeat(40),
+    builtAt: '2026-10-28T10:00:00Z',
+  });
+  return { kind: 'hub' as const, manifest, signature: minisignSign(manifest, `voltax hub ${version}`, opts.key), ...(opts.minFromVersion ? { minFromVersion: opts.minFromVersion } : {}) };
+}
+
+export function firmwareRelease(version: string, board = 'esp32') {
+  const manifest = JSON.stringify({ version, board, sha256: hex64('d'), size: 1_200_000, minHubVersion: '1.0.0' });
+  return { kind: 'esp32' as const, manifest, signature: minisignSign(manifest, `voltax firmware ${board} ${version}`) };
+}
+
 export interface TestStaff {
   staffId: string;
   email: string;
@@ -56,6 +89,8 @@ export interface TestCloud extends Cloud {
   assign(staffId: string, homeId: string, expiresAt?: number | null): Promise<string>;
   /** Registers a hub for the home and records telemetry listing these devices. */
   addHub(homeId: string, hubId: string, devices?: string[]): Promise<void>;
+  /** Telemetry from the hub saying it runs this version (and is online now). */
+  setHubVersion(hubId: string, version: string): Promise<void>;
   /** Inserts an owner-approved, noticed, active grant (as if the hub had reported it). */
   activeGrant(homeId: string, staff: Pick<TestStaff, 'staffId' | 'role'>, actions?: GrantAction[], devices?: string[]): Promise<string>;
   hub: FakeHub;
@@ -111,6 +146,7 @@ export async function startCloud(opts: StartOptions = {}): Promise<TestCloud> {
     dataKey: randomBytes(32),
     commandKeyPem,
     auditKeyPem: ed25519Pem(),
+    releasePublicKey: releasePublicKeyText,
     scryptCost: { N: 1024, r: 8, p: 1 }, // tests only; production uses SCRYPT_DEFAULT
     api: { cookieSecure: false, loginLimitPerMinute: 10_000, ...opts.api },
     ...(opts.transport === null ? {} : { transport: opts.transport ?? fakeTransport }),
@@ -178,6 +214,9 @@ export async function startCloud(opts: StartOptions = {}): Promise<TestCloud> {
     },
     async assign(staffId: string, homeId: string, expiresAt: number | null = null) {
       return (await cloud.homes.assign({ staffId, homeId, expiresAt }, systemAdmin)).assignmentId;
+    },
+    async setHubVersion(hubId: string, version: string) {
+      await cloud.homes.recordTelemetry(hubId, { version, uptime: 1, db: 'up', mqtt: 'up', timeSynced: true, devices: [], update: { state: 'idle' }, at: Date.now() });
     },
     async addHub(homeId: string, hubId: string, devices = ['kitchen', 'porch']) {
       await cloud.homes.registerHub(homeId, hubId, systemAdmin);

@@ -217,7 +217,7 @@ export class HomesService {
   }
 }
 
-function parseTelemetry(raw: string | null): Telemetry | null {
+export function parseTelemetry(raw: string | null): Telemetry | null {
   if (!raw) return null;
   try {
     return JSON.parse(raw) as Telemetry;

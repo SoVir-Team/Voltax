@@ -25,6 +25,8 @@ const schema = z
     COMMAND_KEY_FILE: z.string().default('/run/secrets/cloud-command.key'),
     // Ed25519 audit checkpoint key (PEM). Kept apart from the database.
     AUDIT_KEY_FILE: z.string().default('/run/secrets/cloud-audit.key'),
+    // Public key only (minisign .pub), not a secret: releases must be signed with its private half.
+    RELEASE_PUBKEY_FILE: z.string().default('/etc/voltax/release.pub'),
     AUDIT_EXPORT_INTERVAL_MS: z.coerce.number().int().min(10_000).default(5 * 60_000),
 
     // The cloud's own connection to the cloud broker (EMQX) as the service account.
