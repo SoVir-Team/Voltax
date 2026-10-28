@@ -2,9 +2,11 @@
 //   pairing-code [--role owner|member]   print a one-time pairing code (stdout only, never logged)
 //   clients                              list paired clients
 //   revoke <clientId> [--force]          revoke a client (--force allows the last owner)
+//   remove-device <deviceId>             forget a device (its MQTT credential is removed by remove-device.sh)
 import { Auth } from './auth.js';
 import { loadConfig } from './config.js';
 import { openDb } from './db.js';
+import { Store } from './store.js';
 
 const [command, ...args] = process.argv.slice(2);
 const config = loadConfig({ MQTT_PASSWORD: 'unused-by-cli', ...process.env });
@@ -25,7 +27,7 @@ try {
       const pretty = `${code.slice(0, 5)}-${code.slice(5)}`;
       // Machine-readable last line so voltax-hubctl can render it as a QR code.
       process.stdout.write(
-        `Pairing code (${role}, single use, expires ${new Date(expiresAt).toLocaleTimeString()}): ${pretty}\n` +
+        `Pairing code (${role}, single use, expires ${new Date(expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}): ${pretty}\n` +
           `voltax://pair?hub=${encodeURIComponent(config.HUB_ID)}&code=${code}\n`,
       );
       break;
@@ -43,8 +45,15 @@ try {
       process.stdout.write(`revoked ${id}\n`);
       break;
     }
+    case 'remove-device': {
+      const id = args[0];
+      if (!id) throw new Error('usage: remove-device <deviceId>');
+      if (!new Store(db).deleteDevice(id)) throw new Error('device not found');
+      process.stdout.write(`removed ${id} from the hub database\n`);
+      break;
+    }
     default:
-      throw new Error('usage: cli.js pairing-code [--role owner|member] | clients | revoke <clientId> [--force]');
+      throw new Error('usage: cli.js pairing-code [--role owner|member] | clients | revoke <clientId> [--force] | remove-device <deviceId>');
   }
 } catch (err) {
   process.stderr.write(`${(err as Error).message}\n`);

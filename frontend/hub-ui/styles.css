@@ -165,7 +165,8 @@ a { color: var(--sky-deep); text-decoration: none; }
 
 .form { display: grid; gap: 12px; }
 .form-row { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
-label.field { display: grid; gap: 6px; font-size: 0.8125rem; font-weight: 600; color: var(--navy-2); }
+.time-picker { display: grid; gap: 8px; grid-template-columns: 1fr 1fr 1fr; }
+label.field, div.field { display: grid; gap: 6px; font-size: 0.8125rem; font-weight: 600; color: var(--navy-2); }
 input, select {
   width: 100%; padding: 13px 14px; border-radius: var(--radius-sm); border: 1px solid var(--line);
   background: #f7f9fc; font-size: 1rem; transition: border-color 150ms, background 150ms;

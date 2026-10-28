@@ -103,8 +103,10 @@ const since = (ts) => {
   if (s < 10) return 'just now';
   if (s < 60) return `${s}s ago`;
   if (s < 3600) return `${Math.round(s / 60)}m ago`;
-  return new Date(ts).toLocaleString();
+  return new Date(ts).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
 };
+// Always 12-hour, e.g. 7:05 PM (cron and the hub use 24-hour internally).
+const time12 = (h24, m) => `${h24 % 12 || 12}:${String(m).padStart(2, '0')} ${h24 < 12 ? 'AM' : 'PM'}`;
 
 async function sendCommand(entityId, value, switchEl) {
   if (state.pending.has(entityId)) return;
@@ -397,7 +399,19 @@ function scheduleRow(s) {
 
 function cronLabel(cron) {
   const m = /^(\d{1,2}) (\d{1,2}) \* \* \*$/.exec(cron);
-  return m ? `Every day at ${m[2].padStart(2, '0')}:${m[1].padStart(2, '0')}` : cron;
+  return m ? `Every day at ${time12(Number(m[2]), Number(m[1]))}` : cron;
+}
+
+// Native <input type=time> follows the device locale (often 24-hour), so build an explicit 12-hour picker.
+function timePicker12(h24 = 19, min = 0) {
+  const opts = (values, label, selected) => values.map((v) => h('option', { value: String(v), selected: v === selected ? true : null }, label(v)));
+  const hour = h('select', { 'aria-label': 'Hour' }, opts([12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], String, h24 % 12 || 12));
+  const minute = h('select', { 'aria-label': 'Minute' }, opts([...Array(60).keys()], (v) => String(v).padStart(2, '0'), min));
+  const ampm = h('select', { 'aria-label': 'AM or PM' }, opts(['AM', 'PM'], String, h24 < 12 ? 'AM' : 'PM'));
+  return {
+    el: h('div', { class: 'time-picker' }, hour, minute, ampm),
+    value: () => ({ hour: (Number(hour.value) % 12) + (ampm.value === 'PM' ? 12 : 0), minute: Number(minute.value) }),
+  };
 }
 
 function switchOptions(selected) {
@@ -407,20 +421,21 @@ function switchOptions(selected) {
 
 function scheduleForm(entityId) {
   const name = h('input', { placeholder: 'Evening lights', required: true, maxlength: '64' });
-  const time = h('input', { type: 'time', value: '19:00', required: true });
+  const time = timePicker12();
   const value = h('select', {}, h('option', { value: 'true' }, 'Turn on'), h('option', { value: 'false' }, 'Turn off'));
   const target = h('select', {}, switchOptions(entityId));
   return h('form', { class: 'form', style: 'margin-top:14px', onsubmit: async (e) => {
     e.preventDefault();
-    const [hh, mm] = time.value.split(':');
+    const { hour, minute } = time.value();
     try {
-      await api('/schedules', { method: 'POST', body: { name: name.value, cron: `${Number(mm)} ${Number(hh)} * * *`, entityId: target.value, value: value.value === 'true' } });
+      await api('/schedules', { method: 'POST', body: { name: name.value, cron: `${minute} ${hour} * * *`, entityId: target.value, value: value.value === 'true' } });
       toast('Schedule saved on the hub');
       render();
     } catch (err) { toast(err.message, 'error'); }
   } },
     h('label', { class: 'field' }, 'Name', name),
-    h('div', { class: 'form-row' }, h('label', { class: 'field' }, 'Time', time), h('label', { class: 'field' }, 'Action', value)),
+    h('div', { class: 'field' }, h('span', {}, 'Time'), time.el),
+    h('label', { class: 'field' }, 'Action', value),
     entityId ? null : h('label', { class: 'field' }, 'Device', target),
     h('button', { class: 'btn', type: 'submit', html: `${ICONS.plus.replace('<svg', '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"')}<span>Add schedule</span>` }),
   );

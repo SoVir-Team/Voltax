@@ -2,7 +2,7 @@
 // - App shell: cached, so the app opens instantly and works offline.
 // - API (/api/...): NEVER cached. Device state must always be live from the hub,
 //   so the app can never show a stale "on" for a light that is off.
-const CACHE = 'voltax-shell-v2'; // bump on every UI release so installed apps refresh
+const CACHE = 'voltax-shell-v3'; // bump on every UI release so installed apps refresh
 const SHELL = [
   './',
   'index.html',
