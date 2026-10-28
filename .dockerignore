@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.dev-data
+.git
+.github
+.claude
+.secrets
+docs
+firmware
+deploy
+**/*.env
+**/secrets.yaml

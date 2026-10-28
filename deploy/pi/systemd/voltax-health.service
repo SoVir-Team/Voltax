@@ -1,0 +1,9 @@
+[Unit]
+Description=VOLTEX: restart containers that Docker reports as unhealthy
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+# Docker's restart policy covers crashes, not "running but unhealthy". This covers the rest.
+ExecStart=/usr/local/bin/voltax-health

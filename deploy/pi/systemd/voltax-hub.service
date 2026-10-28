@@ -1,0 +1,15 @@
+[Unit]
+Description=VOLTEX hub services (Mosquitto + hub API) via Docker Compose
+Requires=docker.service
+After=docker.service network-online.target voltax-boot-check.service
+Wants=network-online.target voltax-boot-check.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker compose -p voltax -f /opt/voltax/current/compose.yaml up -d --remove-orphans
+ExecReload=/usr/bin/docker compose -p voltax -f /opt/voltax/current/compose.yaml up -d --remove-orphans
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!-- /etc/avahi/services/voltax.service: lets apps find the hub on the LAN. provision.sh fills __HUB_ID__. -->
+<service-group>
+  <name replace-wildcards="yes">VOLTAX Hub on %h</name>
+  <service>
+    <type>_voltax._tcp</type>
+    <port>8443</port>
+    <txt-record>hubId=__HUB_ID__</txt-record>
+    <txt-record>tls=voltax-hub-ca</txt-record>
+    <txt-record>api=/api/v1</txt-record>
+  </service>
+</service-group>

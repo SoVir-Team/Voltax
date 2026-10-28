@@ -1,0 +1,16 @@
+# Least-privilege ACL for one hub. provision.sh replaces __HUB_ID__.
+# %u = authenticated username. Every ESP32's username is its deviceId, so a device
+# can only act inside voltax/__HUB_ID__/<its own deviceId>/.
+
+# Hub service account: reads states/status, publishes commands, clears retained commands.
+user hub
+topic readwrite voltax/__HUB_ID__/#
+
+# Container health check: read-only, broker uptime only.
+user healthcheck
+topic read $SYS/broker/uptime
+
+# Devices (pattern lines apply to every user):
+pattern write voltax/__HUB_ID__/%u/status
+pattern write voltax/__HUB_ID__/%u/+/+/state
+pattern read voltax/__HUB_ID__/%u/+/+/command

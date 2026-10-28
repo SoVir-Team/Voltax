@@ -1,0 +1,12 @@
+[Unit]
+Description=VOLTEX: finish or roll back an update interrupted by power loss
+Requires=docker.service
+After=docker.service
+Before=voltax-hub.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/voltax-boot-check
+
+[Install]
+WantedBy=multi-user.target

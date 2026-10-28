@@ -1,0 +1,8 @@
+[Unit]
+Description=VOLTEX: nightly consistent backup of the hub database and config
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/voltax-backup nightly
+Nice=10
+IOSchedulingClass=idle
