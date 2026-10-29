@@ -395,9 +395,10 @@ function OwnerOnboarding({ homeId }: { homeId: string }) {
   return <Card title="Homeowner setup">
     {status.data?.claimed ? <p className="small muted">The homeowner has created their account. Family access is managed in the customer app.</p> : <form className="form" onSubmit={e => void generate(e)}>
       <p className="small muted">Generate a one-time code for the homeowner. They use it to create their customer account. A new code replaces the previous unused code.</p>
+      {status.data && !status.data.available && <p className="note">The home hub is not connected right now. Start it and wait about a minute before generating a code.</p>}
       <label className="field">Homeowner email<input type="email" autoComplete="email" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
       {error && <p className="note" role="alert">{error}</p>}
-      <button className="btn" disabled={busy}>{busy ? 'Requesting code?' : 'Generate homeowner code'}</button>
+      <button className="btn" disabled={busy}>{busy ? 'Requesting code…' : 'Generate homeowner code'}</button>
     </form>}
     {result && <SecretBox title="One-time homeowner code" value={result.code} note={`For ${result.email}. Expires ${dateTime(result.expiresAt)}. Copy and give it to the homeowner. Keep it private.`} />}
   </Card>;

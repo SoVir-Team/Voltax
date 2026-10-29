@@ -245,6 +245,15 @@ input:focus, select:focus { border-color: rgba(31, 169, 225, 0.6); background: v
 .pair-card .title { font-size: 1.625rem; margin-bottom: 6px; }
 .pair-card .form { text-align: left; margin-top: 22px; }
 .code-input { letter-spacing: 0.24em; text-transform: uppercase; font-weight: 700; text-align: center; font-size: 1.25rem; }
+/* Account screens: inline outcome messages and quiet text links under a form. */
+.form-error { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bad-soft); color: var(--bad); font-size: 0.875rem; text-align: left; }
+.form-ok { margin: 14px 0 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--sky-soft); color: var(--sky-deep); font-size: 0.875rem; text-align: left; }
+.form-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.link { background: none; border: 0; padding: 6px 0; color: var(--sky-deep); font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+.link:hover { text-decoration: underline; }
+.link:focus-visible { outline: 3px solid rgba(31, 169, 225, 0.45); outline-offset: 2px; border-radius: 6px; }
+.hint { font-weight: 400; color: var(--muted); font-size: 0.75rem; }
+input[readonly] { color: var(--muted); }
 
 .code-box { text-align: center; padding: 22px; border-radius: var(--radius); background: var(--sky-tint); border: 1px dashed rgba(31, 169, 225, 0.45); }
 .code-box .code { font-size: clamp(1.25rem, 6.5vw, 1.75rem); font-weight: 800; letter-spacing: 0.14em; white-space: nowrap; font-variant-numeric: tabular-nums; }

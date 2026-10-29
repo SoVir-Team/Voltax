@@ -5,7 +5,7 @@ import type { Auth, Client, DeviceGrant } from './auth.js';
 import type { AuditLog } from './audit.js';
 import type { DB } from './db.js';
 
-export interface CustomerMail { send(message: { to: string; subject: string; text: string }): Promise<void>; close?(): void }
+export interface CustomerMail { send(message: { to: string; subject: string; text: string; html?: string }): Promise<void>; close?(): void }
 export interface CustomerOptions { origin?: string; mail?: CustomerMail; cookieSecure?: boolean; scryptN?: number }
 interface Account { id: string; email: string; password_hash: string; client_id: string; failed_logins: number; locked_until: number | null }
 interface Invitation { id: string; email: string; role: Role; devices: string; expires_at: number; claim_expires: number | null; used_at: number | null; created_by: string | null }
@@ -13,6 +13,7 @@ const token = () => randomBytes(32).toString('base64url');
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 const norm = (s: string) => s.trim().toLowerCase();
 const DAY = 86400_000;
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 export const CUSTOMER_COOKIE = 'voltax_customer';
 export const SETUP_COOKIE = 'voltax_customer_setup';
 export const SESSION_TTL = 30 * DAY;
@@ -160,7 +161,10 @@ export class CustomerAccounts {
     const secret = token();
     const expiresAt = Date.now() + DAY;
     const id = this.insertInvite(secret, email, 'member', devices, expiresAt, owner.clientId);
-    try { await mail.send({ to: email, subject: 'You are invited to your VOLTEX home', text: `${owner.name} invited you to their VOLTEX home.\n\nAccept invitation: ${origin}/#invite=${encodeURIComponent(secret)}\n\nCreate your account, then sign in. This link expires in 24 hours and works once. If you did not expect this invitation, ignore it.` }); }
+    const link = `${origin}/#invite=${encodeURIComponent(secret)}`;
+    const note = 'Create your account, then sign in. This link expires in 24 hours and works once. If you did not expect this invitation, ignore it.';
+    const html = `<p>${esc(owner.name)} invited you to their VOLTEX home.</p><p><a href="${esc(link)}" style="display:inline-block;padding:12px 22px;border-radius:10px;background:#1ea7e1;color:#ffffff;font-weight:600;text-decoration:none">Accept invitation</a></p><p>${note}</p>`;
+    try { await mail.send({ to: email, subject: 'You are invited to your VOLTEX home', text: `${owner.name} invited you to their VOLTEX home.\n\nAccept invitation: ${link}\n\n${note}`, html }); }
     catch { this.db.prepare('DELETE FROM customer_invitations WHERE id=?').run(id); throw new CustomerError(503, 'The invitation could not be sent. Please try again later.'); }
     this.db.prepare("UPDATE customer_invitations SET used_at=? WHERE email=? AND role='member' AND id<>? AND used_at IS NULL").run(Date.now(), email, id);
     this.audit.append({ actor: `client:${owner.clientId}`, action: 'customer.invite', outcome: 'ok', target: id });

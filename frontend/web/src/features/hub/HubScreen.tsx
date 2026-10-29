@@ -65,10 +65,10 @@ export function HubScreen() {
               className="btn ghost block"
               style={{ marginTop: 8 }}
               onClick={() => {
-                if (confirm('Forget this hub on this browser?')) signOut();
+                if (confirm('Sign out on this browser?')) signOut();
               }}
             >
-              Sign out of this browser
+              Sign out
             </button>
           </div>
         </div>

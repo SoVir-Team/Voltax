@@ -18,13 +18,16 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+/** Account sign-in: the session is an HttpOnly cookie the hub sets, so there is no token to send. */
+export const COOKIE_SESSION = 'cookie';
+
 /** Throws ApiError for any non-2xx except 410 (expired command), which callers handle themselves. */
 export async function apiRequest<T>(path: string, { method = 'GET', body }: ApiOptions = {}, token?: string | null): Promise<ApiResponse<T>> {
   const res = await fetch(API_BASE + path, {
     method,
     headers: {
       ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(token && token !== COOKIE_SESSION ? { authorization: `Bearer ${token}` } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });

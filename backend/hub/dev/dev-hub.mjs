@@ -17,6 +17,8 @@ const DEMO = process.argv.includes('--demo');
 const cloudKey = DEMO ? generateKeyPairSync('ed25519') : null;
 const PORT = Number(process.env.PORT ?? 8080);
 const MQTT_PORT = Number(process.env.MQTT_PORT ?? 18830);
+// --mailpit: customer email to a local Mailpit (docker run -p 1025:1025 -p 8025:8025 axllent/mailpit).
+const SMTP_URL = process.env.DEV_SMTP_URL ?? (process.argv.includes('--mailpit') ? 'smtp://127.0.0.1:1025' : undefined);
 const dataDir = fileURLToPath(new URL('../.dev-data/', import.meta.url));
 mkdirSync(dataDir, { recursive: true });
 
@@ -72,6 +74,11 @@ const hub = await createHub(
     UPDATE_DIR: `${dataDir}update-request`,
     TIME_SYNC_FILE: process.platform === 'win32' ? 'C:\\Windows' : '/',
     UI_DIR: fileURLToPath(new URL('../../../frontend/web/out/', import.meta.url)),
+    // Household accounts: invitation links open this hub; email goes only to DEV_SMTP_URL (e.g. a local
+    // Mailpit), never to a real provider unless you point it there.
+    CUSTOMER_ORIGIN: `http://localhost:${PORT}`,
+    ALLOW_INSECURE_HTTP: true,
+    ...(SMTP_URL ? { CUSTOMER_SMTP_URL: SMTP_URL, CUSTOMER_SMTP_FROM: 'home@voltex.local' } : {}),
   },
   { logger: { level: 'warn' } },
 );
@@ -79,6 +86,13 @@ await hub.start();
 await hub.app.listen({ host: '127.0.0.1', port: PORT });
 
 if (cloudKey) {
+  // Plays the admin portal's "Generate homeowner code" (the product shows it to the admin only).
+  if (!hub.customers.claimed) {
+    const { challenge } = hub.customers.ready();
+    const issued = Date.now();
+    const out = hub.customers.onboard({ v: 1, type: 'customer.onboard', envelopeId: randomUUID(), hubId: HUB_ID, issuedAt: issued, expiresAt: issued + 60_000, actor: { staffId: randomUUID(), role: 'PLATFORM_SUPER_ADMIN', displayName: 'Demo admin' }, email: process.env.DEV_OWNER_EMAIL ?? 'owner@voltex.local', challenge });
+    if (out.result.ok) console.log(`demo homeowner code for ${out.result.email}: ${out.result.code.slice(0, 5)}-${out.result.code.slice(5)} (10 minutes)`);
+  }
   const actor = (role, displayName) => ({ staffId: randomUUID(), role, displayName });
   const send = (body, who) => {
     const now = Date.now();
@@ -105,6 +119,4 @@ if (cloudKey) {
   console.log('demo: a support request and a hub update offer are waiting for the owner');
 }
 
-const { code } = hub.auth.createPairingCode('owner', 60 * 60 * 1000);
-console.log(`\nVOLTAX dev hub: http://localhost:${PORT}`);
-console.log(`Owner pairing code (dev only, 60 min): ${code.slice(0, 5)}-${code.slice(5)}\n`);
+console.log(`\nVOLTAX dev hub: http://localhost:${PORT}\n`);

@@ -1,6 +1,6 @@
 # Customer accounts and household onboarding
 
-Status: requirements reviewed against the repository; awaiting confirmation before implementation.
+Status: implemented and verified locally (automated tests and a browser walk-through with a local Mailpit inbox, 2026-10-29). Real Gmail delivery, phones on the home network and the production hosting are **not** verified; see [Verification](#verification).
 
 ## Requested outcome
 
@@ -102,4 +102,23 @@ These are assumptions, not implemented behavior:
 7. Verify normal and expired/replayed flows, cross-home isolation, role/device restrictions, OTP limits, reset revocation, provider failures, and browser journeys.
 8. Record live SMTP and physical-device verification separately from automated checks.
 
-No customer-account implementation or live email-delivery verification is claimed by this document.
+## Verification
+
+Implemented in `backend/hub/src/customer-accounts.ts` (accounts, sessions, invitations, reset codes), `backend/cloud/src/customer-onboarding.ts` (admin code over a signed envelope with the hub's one-time challenge), `frontend/admin/src/app/home/page.tsx` (Homeowner setup card) and `frontend/web/src/features/account/AccountScreen.tsx` (sign in, code, invitation, sign up, forgot and reset).
+
+**Automated (2026-10-29):**
+- `backend/hub/test/customer-accounts.test.ts` (14): code only opens account setup, no controls before sign-in, lockout, cross-site refusal, per-address limit, family invite, sign-up and device scope, link works once and only for its address, re-invite of a removed member, failed email leaves no invitation, owner name escaped in the HTML email, forgot and reset, no secrets in the audit log.
+- `backend/hub/test/customer-onboard.test.ts` (4) and `backend/cloud/test/onboarding.test.ts` (5): signed request, each challenge used once, super admin only, a home with an owner refuses, the code is shown once and not stored by the cloud.
+- Whole repo: lint, typecheck, `npm test`, `npm run test:pg -w backend/cloud` and `npm run build` pass.
+
+**Browser walk-through (local, `node backend/hub/dev/dev-hub.mjs --demo --mailpit` with Mailpit in Docker):**
+1. Owner: code → welcome and sign-up → sign in → controls; a switch command was confirmed by the (simulated) device.
+2. Owner invites by email and picks one room → the email (HTML button and text link) arrives in Mailpit → Accept → sign up → sign in → only that room's device is visible.
+3. Forgot password: the 6-digit code from Mailpit sets a new password; the old one is refused and the new one signs in.
+4. Sign out ends the session on the hub (the API answers 401 afterwards).
+5. Admin portal (`node backend/cloud/dev/dev-cloud.mjs --demo`): Homeowner setup generates and shows a code once for an unclaimed home; a home with an owner shows no button.
+
+**Not verified, needs manual configuration or testing:**
+- Real delivery through Gmail SMTP. The local launcher reads `.secrets/local/customer-mail.json` (git-ignored); Gmail requires a 16-character app password.
+- Family members opening the link from another device: `CUSTOMER_ORIGIN` must be an address their phones can reach over HTTPS.
+- Production: customer email should come from a transactional email provider configured during deployment (P10), not a personal mailbox.

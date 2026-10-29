@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { PairScreen } from '@/features/pairing/PairScreen';
+import { AccountScreen } from '@/features/account/AccountScreen';
 import { SupportBanner } from '@/features/support/SupportBanner';
 import { useHub, type Connection } from '@/providers/HubProvider';
 import { Icon, type IconName } from './Icon';
@@ -18,13 +18,13 @@ const TABS: { href: string; tab: string; label: string; icon: IconName }[] = [
   { href: '/hub/', tab: 'hub', label: 'Hub', icon: 'hub' },
 ];
 
-/** Top bar + current screen + floating tab bar. Shows pairing until this browser has a hub token. */
+/** Top bar + current screen + floating tab bar. Shows sign-in until this browser has a session. */
 export function AppShell({ children }: { children: ReactNode }) {
   const { ready, session, conn } = useHub();
   const pathname = usePathname();
 
   if (!ready) return <div className="app" />; // static HTML: the session lives in this browser only
-  if (!session) return <PairScreen />;
+  if (!session) return <AccountScreen />;
 
   const section = pathname.split('/')[1] || 'home';
   const current = section === 'device' ? 'home' : section;

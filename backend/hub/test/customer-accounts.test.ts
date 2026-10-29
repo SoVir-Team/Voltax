@@ -8,7 +8,7 @@ import { RELAY, startEnv, type TestEnv } from './helpers.js';
 // -> sign in -> only granted devices; both recover passwords with an emailed one-time code.
 
 const ORIGIN = 'https://home.example.test';
-const mailbox: Array<{ to: string; subject: string; text: string }> = [];
+const mailbox: Array<{ to: string; subject: string; text: string; html?: string }> = [];
 let failMail = false;
 let env: TestEnv;
 
@@ -136,6 +136,7 @@ describe('family member', () => {
     const mail = mailbox.filter((m) => m.to === to).at(-1)!;
     const link = mail.text.match(/(https:\/\/\S+#invite=(\S+))/)!;
     expect(link[1]!.startsWith(`${ORIGIN}/#invite=`)).toBe(true);
+    expect(mail.html).toContain(`<a href="${link[1]}"`); // the Accept button opens the same link
     return decodeURIComponent(link[2]!);
   };
 
@@ -194,6 +195,19 @@ describe('family member', () => {
       failMail = false;
     }
     expect((await req('GET', '/api/v1/customer/invitations', { cookie: ownerCookie })).body.some((i: { email: string }) => i.email === 'aunt@example.test')).toBe(false);
+  });
+
+  it('the owner’s name is escaped in the invitation email', async () => {
+    const owner = env.hub.db.prepare("SELECT client_id, name FROM clients WHERE role='owner' AND revoked_at IS NULL").get() as { client_id: string; name: string };
+    env.hub.db.prepare('UPDATE clients SET name=? WHERE client_id=?').run('<img src=x onerror=alert(1)>', owner.client_id);
+    try {
+      expect((await req('POST', '/api/v1/customer/invitations', { cookie: ownerCookie, body: { email: 'uncle@example.test', devices: [] } })).status).toBe(201);
+      const html = mailbox.filter((m) => m.to === 'uncle@example.test').at(-1)!.html!;
+      expect(html).not.toContain('<img');
+      expect(html).toContain('&#60;img src=x onerror=alert(1)&#62;');
+    } finally {
+      env.hub.db.prepare('UPDATE clients SET name=? WHERE client_id=?').run(owner.name, owner.client_id);
+    }
   });
 });
 

@@ -5,7 +5,7 @@
 // confirms the device reported the requested value (or the command fails/expires).
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ApiError, apiRequest, hubWebSocketUrl, type ApiOptions, type ApiResponse } from '@/lib/api';
+import { ApiError, COOKIE_SESSION, apiRequest, hubWebSocketUrl, type ApiOptions, type ApiResponse } from '@/lib/api';
 import { pretty } from '@/lib/format';
 import type { CommandView, DeviceView, EntityView, HealthView, HubEvent, HubIdentity, PairResult, Role, WsServerMessage } from '@/lib/types';
 import { uuid } from '@/lib/uuid';
@@ -43,7 +43,7 @@ interface HubContextValue {
 }
 
 const STORAGE = { token: 'voltax.token', role: 'voltax.role', clientId: 'voltax.clientId' } as const;
-const REVOKED = 'Your access was removed. Pair again to continue.';
+const REVOKED = 'You were signed out. Sign in again to continue.';
 const TERMINAL = new Set(['confirmed', 'failed', 'expired']);
 
 const HubContext = createContext<HubContextValue | null>(null);
@@ -77,6 +77,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(
     (message?: string) => {
+      // An account session also ends on the hub (its cookie is HttpOnly, so only the hub can clear it).
+      if (tokenRef.current === COOKIE_SESSION) void apiRequest('/customer/logout', { method: 'POST' }).catch(() => undefined);
       for (const key of Object.values(STORAGE)) localStorage.removeItem(key);
       tokenRef.current = null;
       setSession(null);

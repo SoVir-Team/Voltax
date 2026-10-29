@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { DevicePicker } from '@/components/DevicePicker';
 import { SupportPanel } from '@/features/support/SupportPanel';
 import { ApiError } from '@/lib/api';
-import { formatPairingCode, roomOf } from '@/lib/format';
-import type { ClientView, DeviceGrantInput, PairingCode } from '@/lib/types';
+import { roomOf } from '@/lib/format';
+import type { ClientView, DeviceGrantInput } from '@/lib/types';
 import { useHub } from '@/providers/HubProvider';
 import { useToast } from '@/providers/ToastProvider';
 
@@ -53,7 +53,7 @@ function ClientList() {
   const fail = (err: unknown) => toast(err instanceof Error ? err.message : String(err), 'error');
 
   async function remove(c: ClientView) {
-    if (!confirm(`Remove ${c.name}? Their app stops working on this hub immediately.`)) return;
+    if (!confirm(`Remove ${c.name}? They lose access to this home immediately.`)) return;
     try {
       await api(`/clients/${c.clientId}`, { method: 'DELETE' });
       toast(`${c.name} removed`);
@@ -154,46 +154,80 @@ function ClientList() {
   );
 }
 
+interface Invitation {
+  invitationId: string;
+  email: string;
+  expiresAt: number;
+}
+
+/** The owner invites by email; the person accepts from the email, creates an account and signs in. */
 function Invite() {
   const { api } = useHub();
   const toast = useToast();
+  const [email, setEmail] = useState('');
   const [devices, setDevices] = useState<DeviceGrantInput>('*');
-  const [invite, setInvite] = useState<PairingCode | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<Invitation[]>([]);
 
-  useEffect(() => {
-    if (!invite) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [invite]);
+  const load = useCallback(() => {
+    api<Invitation[]>('/customer/invitations').then(
+      ({ data }) => setPending(data),
+      () => undefined,
+    );
+  }, [api]);
+  useEffect(load, [load]);
 
-  async function create() {
+  async function send(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
     try {
-      const { data } = await api<PairingCode>('/pairing-codes', { method: 'POST', body: { devices } });
-      setNow(Date.now());
-      setInvite(data);
+      await api('/customer/invitations', { method: 'POST', body: { email, devices } });
+      toast(`Invitation sent to ${email}`);
+      setEmail('');
+      load();
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel(i: Invitation) {
+    try {
+      await api(`/customer/invitations/${i.invitationId}`, { method: 'DELETE' });
+      toast(`Invitation to ${i.email} cancelled`);
+      load();
     } catch (err) {
       toast((err as Error).message, 'error');
     }
   }
 
-  const left = invite ? Math.max(0, Math.round((invite.expiresAt - now) / 1000)) : 0;
-
   return (
     <>
-      <DevicePicker value={devices} onChange={setDevices} />
-      <button className="btn" onClick={() => void create()}>
-        Invite a member
-      </button>
-      {invite && (
-        <div style={{ marginTop: 14 }}>
-          <div className="code-box">
-            <p className="muted small">Share this code with the person you are inviting</p>
-            <div className="code">{formatPairingCode(invite.code)}</div>
-            <p className="small muted">
-              {left ? `Single use · expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'Expired. Create a new code.'}
-            </p>
-          </div>
+      <form className="form" onSubmit={(e) => void send(e)}>
+        <label className="field">
+          Family member’s email
+          <input type="email" autoComplete="off" required maxLength={254} placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </label>
+        <DevicePicker value={devices} onChange={setDevices} />
+        <button className="btn" type="submit" disabled={busy}>
+          {busy ? 'Sending…' : 'Invite'}
+        </button>
+      </form>
+      <p className="small muted">They get an email with an Accept button, create their account, then sign in. The link works once and expires in 24 hours.</p>
+      {pending.length > 0 && (
+        <div className="list" style={{ marginTop: 10 }}>
+          {pending.map((i) => (
+            <div key={i.invitationId} className="row">
+              <div className="row-main">
+                <p className="row-title">{i.email}</p>
+                <p className="row-sub">Invited · expires {new Date(i.expiresAt).toLocaleString()}</p>
+              </div>
+              <button className="btn ghost sm" onClick={() => void cancel(i)}>
+                Cancel
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </>

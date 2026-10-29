@@ -89,6 +89,12 @@ const transport = {
             { seq: 2, type: 'command.confirmed', createdAt: Date.now() - 300_000, payload: {} },
           ],
         });
+      case 'customer.onboard': {
+        // Like backend/hub: a one-time code for the invited email, then a fresh challenge (each works once).
+        const code = randomBytes(8).toString('hex').toUpperCase().slice(0, 10);
+        later(300, hubId, { type: 'customer.onboard.result', requestId: e.envelopeId, result: { ok: true, code, expiresAt: Date.now() + 600_000, email: e.email } });
+        return later(400, hubId, { type: 'customer.ready', challenge: randomBytes(32).toString('base64url'), claimed: false });
+      }
       case 'hub.update':
         later(1500, hubId, { type: 'update.status', rolloutId: e.rolloutId, state: 'requested', version: e.version });
         return later(6000, hubId, { type: 'update.status', rolloutId: e.rolloutId, state: 'done', version: e.version });
@@ -150,6 +156,16 @@ if (DEMO) {
     ids.push(homeId);
   }
   await cloud.db.query("UPDATE hubs SET last_seen_at = $1 WHERE hub_id = 'office4b-hub'", [Date.now() - 6 * 3_600_000]);
+  // Online hubs keep reporting, as real ones do with their telemetry: Sharma has no homeowner yet
+  // (the admin can generate the first code), Lake view already has one.
+  const report = () => {
+    for (const [, hubId, version, devices] of homes.slice(0, 2)) {
+      void cloud.route(hubId, { type: 'telemetry', telemetry: telemetry(version, devices.map((deviceId, i) => ({ deviceId, online: i !== 1 }))) });
+      void cloud.route(hubId, { type: 'customer.ready', challenge: randomBytes(32).toString('base64url'), claimed: hubId === 'lakeview-hub' });
+    }
+  };
+  report();
+  setInterval(report, 60_000);
   for (const id of ids.slice(0, 2)) await cloud.homes.assign({ staffId: support.staffId, homeId: id, expiresAt: null }, admin.staffId);
   await cloud.homes.assign({ staffId: installer.staffId, homeId: ids[2], expiresAt: null }, admin.staffId);
 

@@ -27,6 +27,16 @@
         "--demo"
       ],
       "port": 8090
+    },
+    {
+      "name": "voltax-dev-hub-accounts",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "backend/hub/dev/dev-hub.mjs",
+        "--demo",
+        "--mailpit"
+      ],
+      "port": 8080
     }
   ]
 }
