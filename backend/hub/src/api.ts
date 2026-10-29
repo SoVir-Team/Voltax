@@ -92,7 +92,11 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
   await app.register(fastifyWebsocket);
 
   app.addHook('onSend', async (req, reply, payload) => {
+    reply.header('x-content-type-options', 'nosniff');
+    reply.header('x-frame-options', 'DENY');
+    reply.header('referrer-policy', 'no-referrer');
     if (req.url.startsWith('/api/')) reply.header('cache-control', 'no-store');
+    else reply.header('content-security-policy', webCsp(req.headers.host));
     return payload;
   });
 
@@ -420,6 +424,28 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
   }
 
   return app;
+}
+
+/**
+ * Web app pages: same-origin everything, never framed (owners approve support access here). Inline
+ * scripts/styles are the Next.js static export's bootstrap and the theme snippet. The live WebSocket
+ * is named explicitly (older Safari does not treat ws: as 'self'); a malformed Host is not reflected.
+ */
+function webCsp(host: string | undefined): string {
+  const ws = host && /^[A-Za-z0-9.-]+(:\d{1,5})?$|^\[[0-9A-Fa-f:.]+\](:\d{1,5})?$/.test(host) ? ` wss://${host} ws://${host}` : '';
+  return [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    `connect-src 'self'${ws}`,
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
 }
 
 function allows(scope: DeviceScope, deviceId: string): boolean {

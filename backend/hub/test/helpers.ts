@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type AddressInfo, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import aedes from 'aedes';
+import { Aedes } from 'aedes';
 import mqtt, { type MqttClient } from 'mqtt';
 import { createHub, type Hub } from '../src/hub.js';
 import type { PushSender } from '../src/push.js';
@@ -14,7 +14,7 @@ const PREFIX = `voltax/${HUB_ID}/esp-relay-01`;
 
 /** In-process MQTT broker standing in for Mosquitto (ACLs are tested separately against real Mosquitto). */
 export async function startBroker(): Promise<{ url: string; close: () => Promise<void> }> {
-  const broker = aedes.createBroker();
+  const broker = await Aedes.createBroker();
   const server: Server = createServer(broker.handle);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
@@ -88,7 +88,7 @@ export interface LocalBroker {
 }
 
 export async function startEnv(
-  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean; cloudUrl?: string; cloudPassword?: string; localBroker?: LocalBroker; version?: string; pushSender?: PushSender | null } = {},
+  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean; cloudUrl?: string; cloudPassword?: string; localBroker?: LocalBroker; version?: string; pushSender?: PushSender | null; uiDir?: string } = {},
 ): Promise<TestEnv> {
   const broker = opts.localBroker ?? (await startBroker());
   const dir = opts.dir ?? mkdtempSync(join(tmpdir(), 'voltax-hub-'));
@@ -109,6 +109,7 @@ export async function startEnv(
       CLOUD_COMMAND_PUBKEY_PEM: opts.cloudKeyPem ?? null,
       UPDATE_DIR: join(dir, 'update-request'),
       pushSender: opts.pushSender ?? null, // tests never reach real push services
+      ...(opts.uiDir ? { UI_DIR: opts.uiDir } : {}),
       ...(opts.cloudUrl ? { CLOUD_URL: opts.cloudUrl, CLOUD_PASSWORD: opts.cloudPassword ?? 'x', TELEMETRY_INTERVAL_MS: 5_000 } : {}),
     },
     { logger: false },

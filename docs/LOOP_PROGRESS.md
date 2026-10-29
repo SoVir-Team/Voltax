@@ -294,8 +294,58 @@ the preview had notifications blocked), and anything on a real Pi or ESP32.
 
 ## P8. Quality
 
-- [ ] ESLint, `npm audit --omit=dev`, CI jobs
-- [ ] Security review and fixes
+- [x] ESLint, `npm audit --omit=dev`, CI jobs
+- [x] Security review and fixes
+
+ESLint: one flat config ([eslint.config.mjs](../eslint.config.mjs)) over every workspace:
+`@eslint/js` + `typescript-eslint` recommended, `no-eval`/`no-implied-eval`/`no-new-func`, the Next
+plugin (recommended + core web vitals) and the classic React hook rules (`rules-of-hooks`,
+`exhaustive-deps`) as errors. The React Compiler rules of `eslint-plugin-react-hooks` v7 are not
+enabled: the apps are not built with the React Compiler (reasoning in the config). Fixed on the way:
+an unused import, three dead initial assignments, an over-wide `let`, a test `any` (now an explained
+disable).
+
+Dependencies: `npm audit --omit=dev` was already 0. The full audit had 3 moderate advisories (`uuid`
+via `aedes` 0.51, the in-process test broker, dev only); `aedes` upgraded to 1.2 (async
+`Aedes.createBroker()` in the 3 call sites), so `npm audit` is now 0 too.
+
+CI ([ci.yml](../.github/workflows/ci.yml)): `npm run lint` before typecheck; a "Production dependency
+audit" job; a "Cloud tests on PostgreSQL 18" job (PGDG `postgresql-18` binaries, the same
+`npm run test:pg` throwaway cluster: triggers, GRANTs, roles). The runner now puts the cluster's Unix
+socket in its temp folder (the packaged `/var/run/postgresql` is not writable by the CI user) and
+prints `server.log` if the server does not start.
+
+Security review (ECC `security-reviewer` checklist, AAS `api-security-testing` kept read-only and
+in-process, the `/security-review` skill on the P8 diff):
+- **Fixed (medium): the hub served the customer web app with no security headers.** A hostile page
+  could frame the app and trick an owner into tapping "Approve" on a support request (clickjacking).
+  The hub now sends `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: no-referrer` and, on pages, a CSP matching the cloud portal's (`frame-ancestors
+  'none'`, `object-src 'none'`, `base-uri 'none'`, same-origin connect plus the hub's own
+  `ws:`/`wss:` origin; a malformed Host header is never reflected). Test first:
+  `backend/hub/test/web-ui.test.ts` 3/3 (seen failing 3/3 before the change).
+- Checked, no change needed: no shell execution in servers; every SQL statement parameterised; no
+  `eval`; the only `dangerouslySetInnerHTML` is the constant theme snippet; push endpoints restricted
+  to known push-service hosts on hub and cloud (no SSRF); secret comparisons timing-safe; passwords
+  scrypt; sessions HttpOnly + SameSite=Strict (+ Secure); cross-origin writes refused; login per-IP
+  limit + account lockout; pairing codes hashed with per-IP and global lockout; body limits; generic
+  500s; audit details redacted; no secrets in logs; the hub WebSocket authenticates by token in its
+  first message (no ambient credentials, so no cross-site WebSocket hijack).
+- `/security-review` on the P8 diff: no findings (the Host-derived CSP value, the envelope
+  signature check after the lint change, the CI jobs and the test runner were each examined).
+- Carried to P10 (deployment): behind Caddy the cloud must run with `TRUST_PROXY` set to the
+  proxy's address, or every login shares the proxy's IP for the per-IP limit.
+
+Evidence (2026-10-29):
+- `npm run lint`: clean. `npm run typecheck`: clean.
+- `npm test`: contracts 18, hub 108, cloud 304 + 11 skipped, web 14, admin 3.
+- `npm run test:pg` (throwaway PostgreSQL 18, runner change included): 311 passed + 4 skipped.
+- `npm audit --omit=dev`: 0. `npm audit`: 0.
+- `npm run test:brokers` (aedes 1.2 helpers): mosquitto PASS, emqx PASS.
+- `npm run build -w frontend/web` and `-w frontend/admin`: ok.
+- Browser (built-in preview, `dev-hub.mjs --demo`, production web build): pages arrive with the new
+  CSP (checked with `curl -I`), pair, live WebSocket ("Local · Live"), client-side navigation; no
+  `securitypolicyviolation` events and no console errors.
 
 ## P9. Load test
 
@@ -317,8 +367,9 @@ the preview had notifications blocked), and anything on a real Pi or ESP32.
 | superpowers | used | test-driven development, verification before completion, systematic debugging (P5 grant race on real PostgreSQL) |
 | apple-design | used | P7 portal and app UI: press states, materials, reduced motion/transparency, typography |
 | ponytail | used | smallest complete change |
-| ECC (`D:\workspace\repos\ecc`) | planned | `security-reviewer`, `tdd-guide`, `database-reviewer` checklists |
-| Agentic Awesome Skills | planned | `auth-implementation-patterns`, `audit-logging`, `api-security-testing` |
+| ECC (`D:\workspace\repos\ecc`) | used | P8 `security-reviewer` checklist (`tdd-guide`, `database-reviewer` still planned) |
+| Agentic Awesome Skills | used | P8 `api-security-testing` (read-only, own code, in-process tests); `auth-implementation-patterns`, `audit-logging` planned |
+| `/security-review` skill | used | P8 diff review |
 | find-skills | planned | start of each phase |
 | REA (MCP) | planned | SQLite audit inspection where it adds evidence |
 | Ruflo | **unavailable** | MCP tools not loaded in this session; repo used as a playbook only |
