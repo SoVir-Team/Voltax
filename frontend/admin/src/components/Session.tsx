@@ -49,12 +49,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => removeEventListener('online', retry);
   }, [reload]);
 
-  // Signed out (or the session ended) -> login. Signed in without two-factor -> finish setup first.
+  // Only a valid password-authenticated session opens the portal.
   useEffect(() => {
     if (!ready || offline) return;
     if (!me && !OPEN_PAGES.includes(path)) router.replace('/login/');
-    else if (me && !me.mfa && path !== '/setup/') router.replace('/setup/');
-    else if (me?.mfa && OPEN_PAGES.includes(path)) router.replace('/');
+    else if (me && OPEN_PAGES.includes(path)) router.replace('/');
   }, [ready, offline, me, path, router]);
 
   const signOut = useCallback(async () => {
@@ -69,7 +68,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     offline,
     reload,
     signOut,
-    can: (a) => !!me?.mfa && can(me.staff.role, a),
+    can: (a) => !!me && can(me.staff.role, a),
   };
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

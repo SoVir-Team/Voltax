@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MAX_FAILED_LOGINS } from '../src/staff.js';
+import { PLATFORM_ROLES } from '@voltax/contracts';
+import { MAX_FAILED_LOGINS, SESSION_TTL_MS } from '../src/staff.js';
 import { PASSWORD, startCloud, type TestCloud } from './helpers.js';
 
 let c: TestCloud;
@@ -11,7 +12,7 @@ afterAll(async () => {
 });
 
 describe('staff authentication', () => {
-  it('a setup link is single-use, and a setup-only session can do nothing but enrol two-factor', async () => {
+  it('a setup link is single-use and starts a full password-authenticated session', async () => {
     const { setupToken } = await c.staff.create({ email: 'new.person@voltex.test', displayName: 'New Person', role: 'PLATFORM_SUPPORT' }, 'cli');
     const first = await c.req('POST', '/api/v1/auth/setup', { body: { token: setupToken, password: PASSWORD } });
     expect(first.status).toBe(200);
@@ -21,10 +22,10 @@ describe('staff authentication', () => {
     const cookie = String(first.headers['set-cookie']).split(';')[0]!;
     expect(String(first.headers['set-cookie'])).toMatch(/HttpOnly; SameSite=Strict/);
     expect((await c.req('GET', '/api/v1/auth/me', { cookie })).body.mfa).toBe(false);
-    const blocked = await c.req('GET', '/api/v1/homes', { cookie });
-    expect(blocked.status).toBe(403);
-    expect(blocked.body.error).toBe('mfa_required');
-    expect((await c.req('POST', '/api/v1/auth/password', { cookie, body: { current: PASSWORD, next: 'something else long' } })).status).toBe(403);
+    expect((await c.req('GET', '/api/v1/homes', { cookie })).status).toBe(200);
+    const me = (await c.req('GET', '/api/v1/auth/me', { cookie })).body;
+    expect(me.sessionExpiresAt - Date.now()).toBeGreaterThan(SESSION_TTL_MS - 10_000);
+    expect((await c.req('POST', '/api/v1/auth/password', { cookie, body: { current: PASSWORD, next: 'something else long' } })).status).toBe(200);
   });
 
   it('weak passwords are refused at setup', async () => {
@@ -32,39 +33,40 @@ describe('staff authentication', () => {
     expect((await c.req('POST', '/api/v1/auth/setup', { body: { token: setupToken, password: 'short' } })).status).toBe(400);
   });
 
-  it('a password alone never signs in: no session before two-factor enrolment, and the code is required after', async () => {
-    const { staff, setupToken } = await c.staff.create({ email: 'nomfa@voltex.test', displayName: 'No MFA', role: 'INSTALLER' }, 'cli');
-    await c.req('POST', '/api/v1/auth/setup', { body: { token: setupToken, password: PASSWORD } });
-    const before = await c.req('POST', '/api/v1/auth/login', { body: { email: staff.email, password: PASSWORD } });
-    expect(before.status).toBe(403);
-    expect(before.headers['set-cookie']).toBeUndefined();
-
-    const s = await c.addStaff('INSTALLER');
-    const noCode = await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD } });
-    expect(noCode.status).toBe(401);
-    expect(noCode.headers['set-cookie']).toBeUndefined();
+  it('every staff role can sign in with email and password, without an authenticator', async () => {
+    for (const role of PLATFORM_ROLES) {
+      const s = await c.addStaff(role);
+      const login = await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD } });
+      expect(login.status, role).toBe(200);
+      const cookie = String(login.headers['set-cookie']).split(';')[0]!;
+      const me = await c.req('GET', '/api/v1/auth/me', { cookie });
+      expect(me.body.staff.role).toBe(role);
+      expect(me.body.mfa).toBe(false);
+    }
   });
 
-  it('a TOTP code is accepted once; replaying it fails', async () => {
+  it('accounts enrolled under the old policy can sign in without a code', async () => {
     const s = await c.addStaff('PLATFORM_SUPPORT');
-    const code = await c.nextCode(s.staffId, s.secret);
-    expect((await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD, code } })).status).toBe(200);
-    expect((await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD, code } })).status).toBe(401);
+    await c.db.query('UPDATE staff SET totp_secret = $2 WHERE id = $1', [s.staffId, 'legacy-encrypted-secret']);
+    expect((await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD } })).status).toBe(200);
+    const wrong = await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: 'wrong password' } });
+    expect(wrong.status).toBe(401);
+    expect(wrong.headers['set-cookie']).toBeUndefined();
   });
 
   it('locks the account after repeated failures, even for the right password', async () => {
     const s = await c.addStaff('PLATFORM_SUPPORT');
     for (let i = 0; i < MAX_FAILED_LOGINS; i++) {
-      await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: 'wrong password!!', code: '000000' }, headers: { 'x-test': String(i) } });
+      await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: 'wrong password!!' }, headers: { 'x-test': String(i) } });
     }
-    const locked = await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD, code: await c.nextCode(s.staffId, s.secret) } });
+    const locked = await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD } });
     expect(locked.status).toBe(429);
   });
 
   it('unknown accounts and wrong passwords get the same answer', async () => {
     const s = await c.addStaff('INSTALLER');
-    const unknown = await c.req('POST', '/api/v1/auth/login', { body: { email: 'nobody@voltex.test', password: PASSWORD, code: '123456' } });
-    const wrong = await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: 'not the password', code: '123456' } });
+    const unknown = await c.req('POST', '/api/v1/auth/login', { body: { email: 'nobody@voltex.test', password: PASSWORD } });
+    const wrong = await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: 'not the password' } });
     expect(unknown.status).toBe(401);
     expect(wrong.status).toBe(401);
     expect(unknown.body).toEqual(wrong.body);
@@ -93,7 +95,7 @@ describe('staff authentication', () => {
     expect((await c.req('GET', '/api/v1/homes', { cookie: s.cookie })).status).toBe(200);
     expect((await c.req('PATCH', `/api/v1/staff/${s.staffId}`, { cookie: admin.cookie, body: { disabled: true } })).status).toBe(200);
     expect((await c.req('GET', '/api/v1/homes', { cookie: s.cookie })).status).toBe(401);
-    const login = await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD, code: await c.nextCode(s.staffId, s.secret) } });
+    const login = await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD } });
     expect(login.status).toBe(401);
   });
 
@@ -132,7 +134,7 @@ describe('staff authentication', () => {
     expect(reset.status).toBe(200);
     expect(typeof reset.body.setupToken).toBe('string');
     expect((await c.req('GET', '/api/v1/homes', { cookie: s.cookie })).status).toBe(401);
-    expect((await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD, code: '123456' } })).status).toBe(401);
+    expect((await c.req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD } })).status).toBe(401);
     expect((await c.req('POST', '/api/v1/auth/setup', { body: { token: reset.body.setupToken, password: PASSWORD } })).status).toBe(200);
   });
 
@@ -144,14 +146,13 @@ describe('staff authentication', () => {
     expect(form.statusCode).toBe(415);
   });
 
-  it('never stores passwords, codes, setup tokens or session tokens in the audit log', async () => {
+  it('never stores passwords, setup tokens or session tokens in the audit log', async () => {
     const s = await c.addStaff('PLATFORM_SUPPORT');
     const token = s.cookie.split('=')[1]!;
     const rows = await c.db.query<{ details: string; target: string | null; actor: string }>('SELECT details, target, actor FROM audit_log');
     const all = JSON.stringify(rows);
     expect(all).not.toContain(PASSWORD);
     expect(all).not.toContain(token);
-    expect(all).not.toContain(s.secret);
   });
 
   it('rate-limits login attempts per client address (production default: 10 a minute)', async () => {
@@ -159,7 +160,7 @@ describe('staff authentication', () => {
     try {
       const statuses: number[] = [];
       for (let i = 0; i < 12; i++) {
-        statuses.push((await limited.req('POST', '/api/v1/auth/login', { body: { email: 'x@voltex.test', password: 'whatever', code: '123456' } })).status);
+        statuses.push((await limited.req('POST', '/api/v1/auth/login', { body: { email: 'x@voltex.test', password: 'whatever' } })).status);
       }
       expect(statuses.slice(0, 10).every((s) => s === 401)).toBe(true);
       expect(statuses.slice(10)).toEqual([429, 429]);

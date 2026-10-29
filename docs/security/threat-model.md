@@ -19,7 +19,7 @@ model from Milestone 1 is described in [architecture.md](../architecture.md) and
 
 1. **Each home's hub is the final authority for its home.** The cloud may be compromised or
    misconfigured, and hubs are built to stay safe when it is.
-2. Cloud API ↔ staff browsers: TLS, staff sessions + TOTP.
+2. Cloud API ↔ staff browsers: TLS, staff sessions with email/password login, scrypt hashing, account lockout and rate limits. Authenticator codes are not required; theft of a valid password can therefore open a staff session.
 3. Cloud ↔ hubs: outbound MQTT/TLS from the hub. A per-hub broker credential with an ACL limited
    to `voltax-cloud/<hubId>/#`, plus signed envelopes cloud → hub.
 4. Hub ↔ ESP32: home broker, per-device credentials and ACL (Milestone 1).

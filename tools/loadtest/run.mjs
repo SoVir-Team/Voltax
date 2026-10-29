@@ -169,8 +169,6 @@ try {
   say(`cloud on ${cloudUrl} (pid ${cloud.pid})`);
 
   // --- seeding through the API (not measured) ------------------------------------------------------
-  const { totpAt, TOTP_STEP_MS } = await load('backend/cloud/dist/crypto.js');
-  const step = () => Math.floor(Date.now() / TOTP_STEP_MS);
   let ipSeq = 0;
   const nextIp = () => {
     ipSeq++;
@@ -188,21 +186,16 @@ try {
     if (!res.ok) throw new Error(`${method} ${path}: ${res.status} ${JSON.stringify(json)}`);
     return json;
   };
-  /** First-time setup like a new staff member: password, TOTP enrolment. */
+  /** First-time setup like a new staff member: password setup. */
   const enrol = async (token) => {
     const s = { ip: nextIp(), cookie: null, password: randomBytes(18).toString('base64url') };
     await api(s, 'POST', '/api/v1/auth/setup', { token, password: s.password });
-    s.secret = (await api(s, 'POST', '/api/v1/auth/totp/begin')).secret;
-    s.lastStep = step();
-    await api(s, 'POST', '/api/v1/auth/totp/confirm', { code: totpAt(s.secret, s.lastStep) });
     s.cookie = null;
     return s;
   };
   const ops = await enrol(opsToken);
   ops.email = 'ops@example.test';
-  ops.lastStep += 1;
-  if (ops.lastStep > step() + 1) await sleep(TOTP_STEP_MS);
-  await api(ops, 'POST', '/api/v1/auth/login', { email: ops.email, password: ops.password, code: totpAt(ops.secret, ops.lastStep) });
+  await api(ops, 'POST', '/api/v1/auth/login', { email: ops.email, password: ops.password });
 
   const pool = async (items, n, fn) => {
     const out = new Array(items.length);
@@ -230,7 +223,7 @@ try {
     ...Array(Math.round((USERS * 2) / 3)).fill('PLATFORM_SUPPORT'),
   ];
   while (roles.length < USERS) roles.push('INSTALLER');
-  say(`seeding ${USERS} staff accounts (password + TOTP setup through the API, production scrypt cost)`);
+  say(`seeding ${USERS} staff accounts (email/password setup through the API, production scrypt cost)`);
   let sup = 0;
   let ins = 0;
   const users = await pool(roles, 8, async (role, i) => {
@@ -247,7 +240,7 @@ try {
     }
     assigned = [...new Set(assigned)];
     for (const homeId of assigned) await api(ops, 'POST', '/api/v1/assignments', { staffId: created.staff.staffId, homeId });
-    return { email, password: s.password, secret: s.secret, lastStep: s.lastStep, ip: s.ip, role, staffId: created.staff.staffId, homes: assigned };
+    return { email, password: s.password, ip: s.ip, role, staffId: created.staff.staffId, homes: assigned };
   });
 
   const plan = {
@@ -262,7 +255,7 @@ try {
     homes: homes.map((h) => ({ homeId: h.homeId, devices: h.devices })),
     homeById: Object.fromEntries(homes.map((h) => [h.homeId, { homeId: h.homeId, devices: h.devices }])),
     users,
-    sampler: { email: ops.email, password: ops.password, secret: ops.secret, lastStep: ops.lastStep, ip: ops.ip, role: 'PLATFORM_SUPER_ADMIN', homes: [] },
+    sampler: { email: ops.email, password: ops.password, ip: ops.ip, role: 'PLATFORM_SUPER_ADMIN', homes: [] },
   };
   const planFile = join(work, 'plan.json'); // throwaway credentials for this run only, deleted at the end
   writeFileSync(planFile, JSON.stringify(plan));
@@ -352,8 +345,11 @@ try {
     notificationsByStatus: Object.fromEntries((await db.query('SELECT status, count(*)::int AS n FROM notifications GROUP BY status')).rows.map((x) => [x.status, x.n])),
   };
   await db.end();
+  // This session has been idle since seeding; past the cloud's 60-minute idle limit it is (rightly) gone.
+  ops.cookie = null;
+  const relogin = await api(ops, 'POST', '/api/v1/auth/login', { email: ops.email, password: ops.password }).catch((err) => ({ error: err.message }));
   const verifyStart = performance.now();
-  const auditVerify = await api(ops, 'POST', '/api/v1/audit/verify').catch((err) => ({ error: err.message }));
+  const auditVerify = relogin?.error ? relogin : await api(ops, 'POST', '/api/v1/audit/verify').catch((err) => ({ error: err.message }));
   const auditVerifyMs = Math.round(performance.now() - verifyStart);
 
   for (const w of workers) w.send({ type: 'stop' });

@@ -4,6 +4,8 @@ import type { Diagnostics, HealthView, Telemetry } from '@voltax/contracts';
 import { buildApi } from './api.js';
 import { AuditLog } from './audit.js';
 import { Auth } from './auth.js';
+import { CustomerAccounts, type CustomerOptions } from './customer-accounts.js';
+import { customerSmtp } from './customer-email.js';
 import { AutomationEngine } from './automations.js';
 import { CloudLink } from './cloud-link.js';
 import { CommandManager } from './commands.js';
@@ -22,6 +24,7 @@ export interface Hub {
   app: FastifyInstance;
   db: DB;
   auth: Auth;
+  customers: CustomerAccounts;
   audit: AuditLog;
   mqtt: MqttLink;
   commands: CommandManager;
@@ -45,6 +48,11 @@ type HubConfig = Pick<
 > &
   Partial<Pick<Config, 'CLOUD_URL' | 'CLOUD_PASSWORD' | 'CLOUD_CA' | 'TELEMETRY_INTERVAL_MS' | 'UPDATE_DIR'>> & {
     UI_DIR?: string;
+    CUSTOMER_ORIGIN?: string;
+    CUSTOMER_SMTP_URL?: string;
+    CUSTOMER_SMTP_FROM?: string;
+    ALLOW_INSECURE_HTTP?: boolean;
+    customerOptions?: CustomerOptions;
     CLOUD_COMMAND_PUBKEY_PEM?: string | null;
     /** Contact the push services see in VAPID requests (`mailto:` or `https:`). */
     PUSH_SUBJECT?: string;
@@ -62,6 +70,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
   const store = new Store(db);
   const auth = new Auth(db);
   const audit = new AuditLog(db);
+  const customers = new CustomerAccounts(db, auth, audit, { origin: config.CUSTOMER_ORIGIN, cookieSecure: !config.ALLOW_INSECURE_HTTP, mail: customerSmtp(config.CUSTOMER_SMTP_URL, config.CUSTOMER_SMTP_FROM), ...config.customerOptions });
 
   // The app logger only exists after buildApi(); MQTT logs go through it once it does.
   let app: FastifyInstance | undefined;
@@ -80,7 +89,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
   const automations = new AutomationEngine(db, commands, events);
   mqtt.onState((r) => automations.handleState(r));
   const timeSynced = () => existsSync(config.TIME_SYNC_FILE);
-  const verifier = new EnvelopeVerifier(db, { hubId: config.HUB_ID, publicKeyPem: config.CLOUD_COMMAND_PUBKEY_PEM ?? null, timeSynced });
+  const verifier = new EnvelopeVerifier(db, { hubId: config.HUB_ID, publicKeyPem: config.CLOUD_COMMAND_PUBKEY_PEM ?? null, timeSynced, onboardingChallenge: value => customers.matchesChallenge(value) });
   const updates = new UpdateDropbox(config.UPDATE_DIR ?? '/var/lib/voltax/update-request');
 
   const health = (): HealthView => {
@@ -144,6 +153,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
     store,
     verifier,
     diagnostics,
+    onboard: env => customers.onboard(env),
     updates: updateService,
     ...(config.onRestartRequested ? { restart: config.onRestartRequested } : {}),
   });
@@ -163,7 +173,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
           ...(config.CLOUD_CA && existsSync(config.CLOUD_CA) ? { caFile: config.CLOUD_CA } : {}),
           ...(config.TELEMETRY_INTERVAL_MS ? { telemetryIntervalMs: config.TELEMETRY_INTERVAL_MS } : {}),
         },
-        { db, grants, audit, telemetry },
+        { db, grants, audit, telemetry, customerReady: () => customers.ready() },
         log,
       )
     : null;
@@ -177,6 +187,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       events,
       commands,
       auth,
+      customers,
       audit,
       grants,
       updates: updateService,
@@ -196,6 +207,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
     app: api,
     db,
     auth,
+    customers,
     audit,
     mqtt,
     commands,
@@ -235,6 +247,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       commands.stop();
       await cloud?.stop();
       await api.close();
+      customers.options.mail?.close?.();
       await mqtt.stop();
       db.close();
     },

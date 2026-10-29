@@ -3,7 +3,6 @@ import { PLATFORM_PERMISSIONS, PLATFORM_ROLES, type PlatformAction, type Platfor
 /**
  * Every /api route declares exactly one of these in `config.guard`; startup fails otherwise.
  * - public:  no session (allow-list below)
- * - setup:   any session, including one that has not finished two-factor enrolment
  * - self:    any fully signed-in staff member, acting on their own account
  * - action:  a platform permission from shared/contracts permissions.ts. Scopes are enforced here:
  *            'assigned'/'grant' need `home` (where the home id comes from) or `list` (the handler
@@ -11,7 +10,7 @@ import { PLATFORM_PERMISSIONS, PLATFORM_ROLES, type PlatformAction, type Platfor
  */
 export type CloudGuard =
   | { public: true }
-  | { session: 'setup' | 'self' }
+  | { session: 'self' }
   | { action: PlatformAction; home?: 'params' | 'body' | 'query'; list?: true; own?: true };
 
 export const PUBLIC_CLOUD_ROUTES = ['GET /api/v1/health', 'POST /api/v1/auth/login', 'POST /api/v1/auth/setup'] as const;

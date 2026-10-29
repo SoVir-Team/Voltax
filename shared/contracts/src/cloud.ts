@@ -76,6 +76,7 @@ const envelopeBase = {
 };
 
 export const cloudEnvelopeSchema = z.discriminatedUnion('type', [
+  z.object({ ...envelopeBase, type: z.literal('customer.onboard'), email: z.email().max(254), challenge: z.string().min(32).max(128) }),
   z.object({ ...envelopeBase, type: z.literal('grant.request'), grant: grantRequestSchema }),
   z.object({
     ...envelopeBase,
@@ -196,6 +197,8 @@ export const hubMessageSchema = z.discriminatedUnion('type', [
     reason: z.string().max(200).optional(),
   }),
   z.object({ type: z.literal('envelope.rejected'), envelopeId: z.uuid().optional(), reason: z.string().max(200) }),
+  z.object({ type: z.literal('customer.ready'), challenge: z.string().min(32).max(128), claimed: z.boolean() }),
+  z.object({ type: z.literal('customer.onboard.result'), requestId: z.uuid(), result: z.discriminatedUnion('ok', [z.object({ ok: z.literal(true), code: z.string().length(10), expiresAt: epochMs, email: z.email() }), z.object({ ok: z.literal(false), message: z.string().max(200) })]) }),
   z.object({ type: z.literal('telemetry'), telemetry: telemetrySchema }),
   z.object({ type: z.literal('diagnostics.result'), requestId: z.uuid(), grantId: z.uuid(), diagnostics: diagnosticsSchema }),
   z.object({

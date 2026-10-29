@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PLATFORM_ROLES, platformScope, type PlatformAction, type PlatformRole } from '@voltax/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { CloudGuard } from '../src/guard.js';
-import { hubRelease, PASSWORD, startCloud, type TestCloud, type TestStaff } from './helpers.js';
+import { hubRelease, startCloud, type TestCloud, type TestStaff } from './helpers.js';
 
 // Every guarded route x every platform role x (assigned home, unassigned home), with the expected
 // outcome derived from shared/contracts permissions.ts. A new route without an entry here fails.
@@ -39,6 +39,8 @@ const ROUTES: Record<string, Build> = {
   'GET /api/v1/assignments': async () => ({ url: '/api/v1/assignments' }),
   'POST /api/v1/assignments': async () => ({ url: '/api/v1/assignments', body: { staffId: await freshStaff(), homeId: homeA } }),
   'DELETE /api/v1/assignments/:assignmentId': async () => ({ url: `/api/v1/assignments/${await c.assign(await freshStaff(), homeA)}` }),
+  'GET /api/v1/homes/:homeId/onboarding': async h => ({ url: `/api/v1/homes/${h}/onboarding` }),
+  'POST /api/v1/homes/:homeId/onboarding': async h => ({ url: `/api/v1/homes/${h}/onboarding`, body: { email: 'owner@voltex.test' } }),
   'GET /api/v1/homes': async () => ({ url: '/api/v1/homes' }),
   'POST /api/v1/homes': async () => ({ url: '/api/v1/homes', body: { name: 'Another home' } }),
   'GET /api/v1/homes/:homeId': async (h) => ({ url: `/api/v1/homes/${h}` }),
@@ -186,13 +188,12 @@ describe('manipulated identifiers and cross-home isolation', () => {
     expect(denied.some((r) => r.details.reason === 'INSTALLER may not staff.read')).toBe(true);
   });
 
-  it('a setup-only session (no two-factor yet) is refused on every action route', async () => {
+  it('a setup token cannot be used as a session cookie on any action route', async () => {
     const { setupToken } = await c.staff.create({ email: `half-${randomUUID().slice(0, 6)}@voltex.test`, displayName: 'Half', role: 'PLATFORM_SUPER_ADMIN' }, 'cli');
-    const setup = await c.req('POST', '/api/v1/auth/setup', { body: { token: setupToken, password: PASSWORD } });
-    const cookie = String(setup.headers['set-cookie']).split(';')[0]!;
+    const cookie = `voltax_session=${setupToken}`;
     for (const r of actionRoutes()) {
       const res = await c.req(r.method, r.url.replace(/:\w+/g, homeA), { cookie, body: r.method === 'GET' || r.method === 'DELETE' ? undefined : {} });
-      expect(res.status, `${r.method} ${r.url}`).toBe(403);
+      expect(res.status, `${r.method} ${r.url}`).toBe(401);
     }
   });
 });

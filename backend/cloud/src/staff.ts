@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PlatformRole, StaffView } from '@voltax/contracts';
 import type { CloudAudit } from './audit.js';
-import { hashPassword, newToken, newTotpSecret, otpauthUri, seal, sha256, unseal, verifyPassword, verifyTotp, type ScryptCost } from './crypto.js';
+import { hashPassword, newToken, sha256, verifyPassword, type ScryptCost } from './crypto.js';
 import type { Db } from './db.js';
 import { CloudError, conflict, forbidden, notFound } from './errors.js';
 
@@ -47,7 +47,7 @@ export class StaffService {
   constructor(
     private db: Db,
     private audit: CloudAudit,
-    private dataKey: Buffer,
+    _dataKey: Buffer,
     private scryptCost?: ScryptCost,
   ) {}
 
@@ -82,7 +82,7 @@ export class StaffService {
     return this.create({ email, displayName, role: 'PLATFORM_SUPER_ADMIN' }, 'cli');
   }
 
-  /** Setup link: sets the password and returns a session that can only enrol TOTP. */
+  /** One-time setup link: sets the password and signs the staff member in. */
   async completeSetup(token: string, password: string): Promise<{ token: string; staff: StaffView }> {
     const hash = sha256(token);
     const now = Date.now();
@@ -106,14 +106,14 @@ export class StaffService {
       throw new CloudError(400, 'invalid_setup', 'this setup link is invalid, expired or already used');
     }
     await this.audit.append({ actor: `staff:${staff.id}`, action: 'staff.setup', outcome: 'ok', target: `staff:${staff.id}` });
-    return { token: await this.newSession(staff.id, false), staff: view(staff) };
+    return { token: await this.newSession(staff.id), staff: view(staff) };
   }
 
-  async login(emailInput: string, password: string, code: string | undefined, ip: string): Promise<{ token: string; staff: StaffView }> {
+  async login(emailInput: string, password: string, ip: string): Promise<{ token: string; staff: StaffView }> {
     const email = emailInput.trim().toLowerCase();
     const [staff] = await this.db.query<StaffRow>('SELECT * FROM staff WHERE email = $1', [email]);
     const now = Date.now();
-    const fail = async (reason: string, status = 401, message = 'email, password or code is incorrect') => {
+    const fail = async (reason: string, status = 401, message = 'email or password is incorrect') => {
       await this.audit.append({ actor: `ip:${ip}`, action: 'auth.login', outcome: 'denied', target: staff ? `staff:${staff.id}` : null, details: { reason } });
       throw new CloudError(status, 'login_failed', message);
     };
@@ -130,23 +130,14 @@ export class StaffService {
     if (staff.locked_until && staff.locked_until > now) return fail('account locked', 429, 'too many failed attempts, try again later');
 
     const passwordOk = await verifyPassword(password, staff.password_hash);
-    let step: number | null = null;
-    if (passwordOk && staff.totp_secret && code) {
-      const matched = verifyTotp(unseal(this.dataKey, staff.totp_secret), code, now);
-      if (matched !== null && matched > (staff.totp_last_step ?? -1)) step = matched;
-    }
-    if (!passwordOk || (staff.totp_secret && step === null)) {
+    if (!passwordOk) {
       const failures = staff.failed_logins + 1;
       const lock = failures >= MAX_FAILED_LOGINS ? now + LOCKOUT_MS : null;
       await this.db.query('UPDATE staff SET failed_logins = $2, locked_until = $3 WHERE id = $1', [staff.id, lock ? 0 : failures, lock]);
-      return fail(passwordOk ? 'bad or reused code' : 'bad password');
+      return fail('bad password');
     }
-    if (!staff.totp_secret) {
-      // Password alone never opens a session: two-factor enrolment happens only through a setup link.
-      return fail('mfa not enrolled', 403, 'finish account setup with your setup link first');
-    }
-    await this.db.query('UPDATE staff SET failed_logins = 0, locked_until = NULL, totp_last_step = $2 WHERE id = $1', [staff.id, step]);
-    const token = await this.newSession(staff.id, true);
+    await this.db.query('UPDATE staff SET failed_logins = 0, locked_until = NULL WHERE id = $1', [staff.id]);
+    const token = await this.newSession(staff.id);
     await this.audit.append({ actor: `staff:${staff.id}`, action: 'auth.login', outcome: 'ok', details: { ip } });
     return { token, staff: view(staff) };
   }
@@ -161,7 +152,7 @@ export class StaffService {
        FROM sessions s JOIN staff ON staff.id = s.staff_id WHERE s.token_hash = $1`,
       [hash],
     );
-    if (!row || row.s_revoked || row.s_expires <= now || now - row.s_seen > SESSION_IDLE_MS || row.disabled_at) return null;
+    if (!row || !row.password_hash || row.s_revoked || row.s_expires <= now || now - row.s_seen > SESSION_IDLE_MS || row.disabled_at) return null;
     if (now - row.s_seen > TOUCH_INTERVAL_MS) await this.db.query('UPDATE sessions SET last_seen_at = $2 WHERE token_hash = $1', [hash, now]);
     return {
       session: { tokenHash: hash, staffId: row.id, mfa: row.s_mfa, createdAt: row.s_created, expiresAt: row.s_expires },
@@ -179,30 +170,6 @@ export class StaffService {
   async logout(session: Session): Promise<void> {
     await this.db.query('UPDATE sessions SET revoked_at = $2 WHERE token_hash = $1 AND revoked_at IS NULL', [session.tokenHash, Date.now()]);
     await this.audit.append({ actor: `staff:${session.staffId}`, action: 'auth.logout', outcome: 'ok' });
-  }
-
-  async beginTotp(auth: Authenticated): Promise<{ secret: string; uri: string }> {
-    if (auth.staff.totp_secret) throw conflict('two-factor authentication is already set up');
-    const secret = newTotpSecret();
-    await this.db.query('UPDATE staff SET totp_pending = $2 WHERE id = $1', [auth.staff.id, seal(this.dataKey, secret)]);
-    return { secret, uri: otpauthUri(secret, auth.staff.email) };
-  }
-
-  async confirmTotp(auth: Authenticated, code: string): Promise<StaffView> {
-    const staff = await this.row(auth.staff.id);
-    if (!staff?.totp_pending || staff.totp_secret) throw conflict('start two-factor setup first');
-    const secret = unseal(this.dataKey, staff.totp_pending);
-    const step = verifyTotp(secret, code);
-    if (step === null) {
-      await this.audit.append({ actor: `staff:${staff.id}`, action: 'auth.totp.enrol', outcome: 'denied' });
-      throw new CloudError(400, 'bad_code', 'that code is not correct; check the time on your phone');
-    }
-    await this.db.tx(async (t) => {
-      await t.query('UPDATE staff SET totp_secret = totp_pending, totp_pending = NULL, totp_last_step = $2 WHERE id = $1', [staff.id, step]);
-      await t.query('UPDATE sessions SET mfa = true WHERE token_hash = $1', [auth.session.tokenHash]);
-    });
-    await this.audit.append({ actor: `staff:${staff.id}`, action: 'auth.totp.enrol', outcome: 'ok' });
-    return view((await this.row(staff.id))!);
   }
 
   async changePassword(auth: Authenticated, current: string, next: string): Promise<void> {
@@ -285,15 +252,15 @@ export class StaffService {
     return token;
   }
 
-  private async newSession(staffId: string, mfa: boolean): Promise<string> {
+  private async newSession(staffId: string): Promise<string> {
     const token = newToken();
     const now = Date.now();
     await this.db.query('INSERT INTO sessions (token_hash, staff_id, mfa, created_at, expires_at, last_seen_at) VALUES ($1, $2, $3, $4, $5, $4)', [
       sha256(token),
       staffId,
-      mfa,
+      false, // Retain the legacy column without claiming a second factor was verified.
       now,
-      now + (mfa ? SESSION_TTL_MS : SETUP_TOKEN_TTL_MS / 24), // a setup-only session lasts 1 hour
+      now + SESSION_TTL_MS,
     ]);
     return token;
   }

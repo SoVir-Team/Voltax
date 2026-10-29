@@ -7,11 +7,9 @@ import { GRANT_ACTIONS, PLATFORM_ROLES, type GrantAction, type PlatformRole } fr
 
 export const PASSWORD_MIN = 12;
 const password = z.string().min(PASSWORD_MIN, `at least ${PASSWORD_MIN} characters`).max(256);
-const totpCode = z.string().regex(/^\d{6}$/, '6 digits');
 
-export const loginSchema = z.object({ email: z.email().max(254), password: z.string().min(1).max(256), code: totpCode.optional() });
+export const loginSchema = z.object({ email: z.email().max(254), password: z.string().min(1).max(256) });
 export const setupSchema = z.object({ token: z.string().min(20).max(128), password });
-export const totpConfirmSchema = z.object({ code: totpCode });
 export const passwordChangeSchema = z.object({ current: z.string().min(1).max(256), next: password });
 
 export const staffCreateSchema = z.object({
@@ -42,6 +40,7 @@ export interface StaffView {
   email: string;
   displayName: string;
   role: PlatformRole;
+  /** Legacy enrollment information; password-only sign-in does not use it. */
   mfaEnrolled: boolean;
   setupComplete: boolean;
   disabled: boolean;
@@ -51,6 +50,7 @@ export interface StaffView {
 
 export interface MeView {
   staff: StaffView;
+  /** Legacy session information; never used to authorize access. */
   mfa: boolean;
   sessionExpiresAt: number;
 }

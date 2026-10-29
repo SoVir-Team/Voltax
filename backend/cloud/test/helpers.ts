@@ -2,7 +2,6 @@ import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign, type Ke
 import { cloudEnvelopeSchema, GRANT_ACTIONS, platformScope, type CloudEnvelope, type GrantAction, type PlatformRole, type SignedEnvelope } from '@voltax/contracts';
 import { SESSION_COOKIE, type CloudApiConfig } from '../src/api.js';
 import { createCloud, type Cloud, type CloudOptions } from '../src/cloud.js';
-import { TOTP_STEP_MS, totpAt } from '../src/crypto.js';
 import pg from 'pg';
 import { pgDb, pgliteDb, type Db } from '../src/db.js';
 
@@ -67,7 +66,6 @@ export interface TestStaff {
   staffId: string;
   email: string;
   role: PlatformRole;
-  secret: string;
   cookie: string;
 }
 
@@ -79,11 +77,9 @@ export interface FakeHub {
 }
 
 export interface TestCloud extends Cloud {
-  /** Fully signed-in staff member (password + TOTP). */
+  /** Fully signed-in staff member (email + password). */
   addStaff(role: PlatformRole, name?: string): Promise<TestStaff>;
-  /** Returns a TOTP code for a step after the last accepted one (codes are single-use). */
-  nextCode(staffId: string, secret: string): Promise<string>;
-  login(s: Pick<TestStaff, 'email' | 'staffId' | 'secret'>): Promise<string>;
+  login(s: Pick<TestStaff, 'email'>): Promise<string>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tests read arbitrary response JSON
   req(method: string, url: string, opts?: { cookie?: string; body?: unknown; headers?: Record<string, string> }): Promise<{ status: number; body: any; headers: Record<string, unknown> }>;
   addHome(name?: string): Promise<string>;
@@ -179,23 +175,14 @@ export async function startCloud(opts: StartOptions = {}): Promise<TestCloud> {
     return `${SESSION_COOKIE}=${token}`;
   };
 
-  const nextCode: TestCloud['nextCode'] = async (staffId, secret) => {
-    const [row] = await cloud.db.query<{ totp_last_step: number | null }>('SELECT totp_last_step FROM staff WHERE id = $1', [staffId]);
-    const now = Math.floor(Date.now() / TOTP_STEP_MS);
-    const step = Math.max(now - 1, (row?.totp_last_step ?? -10) + 1);
-    if (step > now + 1) throw new Error('out of TOTP steps for this 30 s window');
-    return totpAt(secret, step);
-  };
-
   const login: TestCloud['login'] = async (s) => {
-    const res = await req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD, code: await nextCode(s.staffId, s.secret) } });
+    const res = await req('POST', '/api/v1/auth/login', { body: { email: s.email, password: PASSWORD } });
     if (res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
     return cookieFrom(res.headers);
   };
 
   return Object.assign(cloud, {
     req,
-    nextCode,
     login,
     hub,
     commandPublicKeyPem: cloud.signer!.publicKeyPem,
@@ -204,11 +191,7 @@ export async function startCloud(opts: StartOptions = {}): Promise<TestCloud> {
       const { staff, setupToken } = await cloud.staff.create({ email, displayName: name, role }, 'cli');
       const setup = await req('POST', '/api/v1/auth/setup', { body: { token: setupToken, password: PASSWORD } });
       const setupCookie = cookieFrom(setup.headers);
-      const begin = await req('POST', '/api/v1/auth/totp/begin', { cookie: setupCookie });
-      const secret = begin.body.secret as string;
-      const confirm = await req('POST', '/api/v1/auth/totp/confirm', { cookie: setupCookie, body: { code: totpAt(secret, Math.floor(Date.now() / TOTP_STEP_MS)) } });
-      if (confirm.status !== 200) throw new Error(`totp confirm failed: ${JSON.stringify(confirm.body)}`);
-      return { staffId: staff.staffId, email, role, secret, cookie: setupCookie };
+      return { staffId: staff.staffId, email, role, cookie: setupCookie };
     },
     async addHome(name = 'Test home') {
       return (await cloud.homes.create({ name, ownerContact: 'owner@example.test' }, systemAdmin)).homeId;

@@ -5,12 +5,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useSession } from '@/components/Session';
 import { api, ApiError } from '@/lib/api';
 
-/**
- * First sign-in from a one-time setup link (/setup/?token=...): choose a password, then enrol an
- * authenticator app. The portal opens only after both; a password alone never gives access.
- */
+/** Choose a password using a one-time staff setup link. */
 export default function SetupPage() {
-  const { me, ready } = useSession();
+  const { ready } = useSession();
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,11 +27,7 @@ export default function SetupPage() {
         <img className="logo for-light" src="/brand/logo-wordmark.svg" alt="VOLTEX" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="logo for-dark" src="/brand/logo-wordmark-dark.svg" alt="VOLTEX" />
-        <div className="steps" aria-hidden="true" style={{ marginTop: 16 }}>
-          <i className="on" />
-          <i className={me ? 'on' : ''} />
-        </div>
-        {me && !me.mfa ? <TotpStep /> : <PasswordStep token={token} />}
+        <PasswordStep token={token} />
       </div>
     </div>
   );
@@ -89,75 +82,6 @@ function PasswordStep({ token }: { token: string | null }) {
       )}
       <button className="btn block" disabled={busy}>
         Continue
-      </button>
-    </form>
-  );
-}
-
-function TotpStep() {
-  const { reload, signOut } = useSession();
-  const [enrol, setEnrol] = useState<{ secret: string; uri: string } | null>(null);
-  const [code, setCode] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api<{ secret: string; uri: string }>('/auth/totp/begin', {
-      method: 'POST',
-    }).then(setEnrol, (err: Error) => setError(err.message));
-  }, []);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api('/auth/totp/confirm', { method: 'POST', body: { code } });
-      await reload();
-    } catch (err) {
-      setError((err as Error).message);
-      setCode('');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form className="form" onSubmit={(e) => void submit(e)}>
-      <h1 className="title">Turn on two-factor</h1>
-      <p className="sub">Add VOLTEX to an authenticator app (1Password, Google Authenticator, Microsoft Authenticator…), then type the code it shows.</p>
-      {enrol && (
-        <div className="secret">
-          <p className="secret-title">Setup key</p>
-          <code aria-label="Setup key">{enrol.secret.replace(/(.{4})/g, '$1 ').trim()}</code>
-          <p className="small muted" style={{ marginBottom: 0 }}>
-            On this phone? <a href={enrol.uri}>Open in authenticator app</a>
-          </p>
-        </div>
-      )}
-      <label className="field">
-        6-digit code
-        <input
-          className="code-input"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          pattern="\d{6}"
-          maxLength={6}
-          required
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-        />
-      </label>
-      {error && (
-        <p className="note" role="alert">
-          {error}
-        </p>
-      )}
-      <button className="btn block" disabled={busy || !enrol}>
-        Finish setup
-      </button>
-      <button type="button" className="btn ghost block" onClick={() => void signOut()}>
-        Cancel
       </button>
     </form>
   );

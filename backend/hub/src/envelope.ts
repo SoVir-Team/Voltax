@@ -17,6 +17,7 @@ export interface EnvelopeVerifierOptions {
   /** Whether the hub clock is trustworthy (NTP synchronised). Without a trusted clock, refuse. */
   timeSynced: () => boolean;
   now?: () => number;
+  onboardingChallenge?: (value: string) => boolean;
 }
 
 /**
@@ -67,11 +68,13 @@ export class EnvelopeVerifier {
     const id = env.envelopeId;
 
     if (env.hubId !== this.opts.hubId) return { ok: false, reason: 'addressed to another hub', envelopeId: id };
-    if (!this.opts.timeSynced()) return { ok: false, reason: 'hub clock not synchronised', envelopeId: id };
+    const bootstrap = env.type === 'customer.onboard' && env.actor.role === 'PLATFORM_SUPER_ADMIN' && this.opts.onboardingChallenge?.(env.challenge) === true;
+    if (env.type === 'customer.onboard' && !bootstrap) return { ok: false, reason: 'invalid onboarding challenge', envelopeId: id };
+    if (!bootstrap && !this.opts.timeSynced()) return { ok: false, reason: 'hub clock not synchronised', envelopeId: id };
 
     const now = this.now();
-    if (env.issuedAt > now + MAX_CLOCK_SKEW_MS) return { ok: false, reason: 'issued in the future', envelopeId: id };
-    if (env.expiresAt <= now) return { ok: false, reason: 'expired', envelopeId: id };
+    if (!bootstrap && env.issuedAt > now + MAX_CLOCK_SKEW_MS) return { ok: false, reason: 'issued in the future', envelopeId: id };
+    if (!bootstrap && env.expiresAt <= now) return { ok: false, reason: 'expired', envelopeId: id };
     if (env.expiresAt <= env.issuedAt || env.expiresAt - env.issuedAt > maxLifetimeMs(env.type)) {
       return { ok: false, reason: 'lifetime too long', envelopeId: id };
     }

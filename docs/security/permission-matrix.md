@@ -31,7 +31,7 @@ support grant that the home owner approved **on the hub**. The hub re-checks eve
 
 | Action | Super admin | Support | Installer |
 |---|---|---|---|
-| Staff: read / manage, role changes, MFA reset | platform | — | — |
+| Staff: read / manage, role changes, credential reset | platform | — | — |
 | Home assignments | platform | — | — |
 | Homes: create / update metadata | platform | — | — |
 | Homes: read operational metadata | platform | assigned | assigned |

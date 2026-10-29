@@ -10,7 +10,7 @@ import { ROLE_LABEL } from '@/lib/nav';
 
 const setupLink = (token: string) => `${location.origin}/setup/?token=${encodeURIComponent(token)}`;
 
-/** Staff accounts. Nobody gets in without their own password and authenticator; no shared or default logins. */
+/** Staff accounts. Each person uses their own email and password; no shared or default logins. */
 export default function StaffPage() {
   const { me, can } = useSession();
   const { busy, run } = useAction();
@@ -24,7 +24,7 @@ export default function StaffPage() {
     });
 
   async function reset(s: StaffView) {
-    if (!confirm(`Reset ${s.displayName}'s password and authenticator? They are signed out everywhere and need a new setup link.`)) return;
+    if (!confirm(`Reset ${s.displayName}'s password? They are signed out everywhere and need a new setup link.`)) return;
     await run(async () => {
       const { setupToken } = await api<{ setupToken: string }>(`/staff/${s.staffId}/reset`, { method: 'POST' });
       setLink({ name: s.displayName, url: setupLink(setupToken) });
@@ -33,7 +33,7 @@ export default function StaffPage() {
   }
 
   const state = (s: StaffView) =>
-    (s.disabled ? ['error', 'disabled'] : s.locked ? ['warn', 'locked'] : !s.setupComplete || !s.mfaEnrolled ? ['pending', 'setup pending'] : ['ok', 'active']) as [string, string];
+    (s.disabled ? ['error', 'disabled'] : s.locked ? ['warn', 'locked'] : !s.setupComplete ? ['pending', 'setup pending'] : ['ok', 'active']) as [string, string];
 
   return (
     <Page eyebrow="Company accounts" title="Staff">

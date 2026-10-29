@@ -11,7 +11,6 @@ import {
   setupSchema,
   staffCreateSchema,
   staffUpdateSchema,
-  totpConfirmSchema,
   type HubEnrolment,
   type MeView,
   type PlatformScope,
@@ -157,10 +156,8 @@ export async function buildCloudApi(deps: CloudApiDeps, serverOptions: FastifySe
     if (!auth) return unauthorised(req, reply);
     req.auth = auth;
     if ('session' in guard) {
-      if (guard.session === 'self' && !auth.session.mfa) return reply.status(403).send({ error: 'mfa_required', message: 'finish two-factor setup first' });
       return;
     }
-    if (!auth.session.mfa) return reply.status(403).send({ error: 'mfa_required', message: 'finish two-factor setup first' });
 
     const scope = platformScope(auth.staff.role, guard.action);
     if (!scope) return deny(req, reply, 403, `${auth.staff.role} may not ${guard.action}`);
@@ -197,7 +194,7 @@ export async function buildCloudApi(deps: CloudApiDeps, serverOptions: FastifySe
   app.post('/api/v1/auth/login', { config: { guard: { public: true } } }, async (req, reply) => {
     limitLogin(req.ip);
     const body = parse(loginSchema, req.body);
-    const { token, staff: s } = await staff.login(body.email, body.password, body.code, req.ip);
+    const { token, staff: s } = await staff.login(body.email, body.password, req.ip);
     setSessionCookie(reply, token, config.cookieSecure);
     return { staff: s };
   });
@@ -212,22 +209,15 @@ export async function buildCloudApi(deps: CloudApiDeps, serverOptions: FastifySe
 
   // --- own session -------------------------------------------------------------------------------
 
-  app.get('/api/v1/auth/me', { config: { guard: { session: 'setup' } } }, async (req): Promise<MeView> => {
+  app.get('/api/v1/auth/me', { config: { guard: { session: 'self' } } }, async (req): Promise<MeView> => {
     const auth = req.auth as Authenticated;
     return { staff: view(auth.staff), mfa: auth.session.mfa, sessionExpiresAt: auth.session.expiresAt };
   });
 
-  app.post('/api/v1/auth/logout', { config: { guard: { session: 'setup' } } }, async (req, reply) => {
+  app.post('/api/v1/auth/logout', { config: { guard: { session: 'self' } } }, async (req, reply) => {
     await staff.logout((req.auth as Authenticated).session);
     clearSessionCookie(reply, config.cookieSecure);
     return { ok: true };
-  });
-
-  app.post('/api/v1/auth/totp/begin', { config: { guard: { session: 'setup' } } }, async (req) => staff.beginTotp(req.auth as Authenticated));
-
-  app.post('/api/v1/auth/totp/confirm', { config: { guard: { session: 'setup' } } }, async (req) => {
-    const body = parse(totpConfirmSchema, req.body);
-    return { staff: await staff.confirmTotp(req.auth as Authenticated, body.code) };
   });
 
   app.post('/api/v1/auth/password', { config: { guard: { session: 'self' } } }, async (req) => {

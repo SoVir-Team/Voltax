@@ -34,7 +34,8 @@ approves a specific grant, and even then they pass through without being stored.
 | Data | Class | Why it is there | Retention |
 |---|---|---|---|
 | Staff: email, name, role | Personal | Sign-in, assignments | While employed; disabling ends access at once |
-| Staff password hash (scrypt), TOTP secret (AES-256-GCM sealed with `CLOUD_DATA_KEY`) | Secret | Sign-in | Replaced on reset |
+| Staff password hash (scrypt) | Secret | Sign-in | Replaced on reset |
+| Legacy encrypted TOTP fields (if upgrading an existing database) | Secret | Unused by current password-only login | Cleared on credential reset or account setup |
 | Sessions, setup links (SHA-256 hashes only) | Secret | Sign-in | **Deleted hourly** once ended, idle or expired, or once a setup link is used (`StaffService.purgeExpired`, test *retention: ended sessions…*) |
 | Homes: name, owner contact | Personal | Support, owner notices | Until the home is removed. The contact is visible only through the audited `home.contact.read` |
 | Hubs: id, broker password hash, **last** telemetry | Secret / Operational | Fleet view, broker login | Telemetry is overwritten, never accumulated |

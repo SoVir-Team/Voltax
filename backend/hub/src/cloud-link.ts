@@ -40,7 +40,7 @@ export class CloudLink {
 
   constructor(
     private config: CloudLinkConfig,
-    private deps: { db: DB; grants: SupportGrants; audit: AuditLog; telemetry: () => Omit<Telemetry, 'at'> },
+    private deps: { db: DB; grants: SupportGrants; audit: AuditLog; customerReady?: () => HubMessage; telemetry: () => Omit<Telemetry, 'at'> },
     private log: Log,
   ) {}
 

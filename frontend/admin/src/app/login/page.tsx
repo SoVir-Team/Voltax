@@ -4,12 +4,11 @@ import { useState, type FormEvent } from 'react';
 import { useSession } from '@/components/Session';
 import { api, ApiError } from '@/lib/api';
 
-/** Email, password and the 6-digit code from the authenticator app. All three, every time. */
+/** Staff sign in with their own email and password. */
 export default function LoginPage() {
   const { reload } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -20,12 +19,11 @@ export default function LoginPage() {
     try {
       await api('/auth/login', {
         method: 'POST',
-        body: { email, password, code },
+        body: { email, password },
       });
       await reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not reach the server. Check your connection.');
-      setCode('');
     } finally {
       setBusy(false);
     }
@@ -47,19 +45,6 @@ export default function LoginPage() {
         <label className="field">
           Password
           <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        <label className="field">
-          Authenticator code
-          <input
-            className="code-input"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="\d{6}"
-            maxLength={6}
-            required
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-          />
         </label>
         {error && (
           <p className="note" role="alert">

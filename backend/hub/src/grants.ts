@@ -52,6 +52,7 @@ export interface SupportGrantDeps {
     offer(env: Extract<CloudEnvelope, { type: 'hub.update' }>): string | null;
     withdraw(env: Extract<CloudEnvelope, { type: 'hub.update.withdraw' }>): string | null;
   };
+  onboard?: (env: Extract<CloudEnvelope, { type: 'customer.onboard' }>) => Extract<HubMessage, { type: 'customer.onboard.result' }>;
   now?: () => number;
 }
 
@@ -128,6 +129,10 @@ export class SupportGrants {
     const env = checked.envelope;
     try {
       switch (env.type) {
+        case 'customer.onboard':
+          if (this.deps.onboard) this.forward(this.deps.onboard(env));
+          else this.refuse(actorId(env.actor), env.type, 'customer onboarding unavailable', env.envelopeId);
+          return;
         case 'grant.request':
           return this.request(env);
         case 'grant.revoke':

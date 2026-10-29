@@ -8,23 +8,14 @@
 // --demo  adds homes, hubs and staff, and plays the hubs: they answer diagnostics, commands and
 //         update offers, and the "owner" approves support requests after a few seconds. On a real hub
 //         the owner decides in their app; this simulation exists only to click through the portal.
-// code <email>  prints the current authenticator code for a demo account.
 import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createCloud } from '../dist/cloud.js';
-import { TOTP_STEP_MS, totpAt } from '../dist/crypto.js';
 import { pgliteDb } from '../dist/db.js';
 
 const dataDir = fileURLToPath(new URL('../.dev-data/', import.meta.url));
 const accountsFile = `${dataDir}dev-accounts.json`;
-
-if (process.argv[2] === 'code') {
-  const account = JSON.parse(readFileSync(accountsFile, 'utf8')).find((a) => a.email === process.argv[3]);
-  if (!account) throw new Error(`no demo account ${process.argv[3]} in ${accountsFile}`);
-  console.log(totpAt(account.totpSecret, Math.floor(Date.now() / TOTP_STEP_MS)));
-  process.exit(0);
-}
 
 const DEMO = process.argv.includes('--demo');
 const PORT = Number(process.env.PORT ?? 8090);
@@ -130,14 +121,12 @@ const inject = async (method, url, body, cookie) => {
   return { body: res.json(), cookie: String(res.headers['set-cookie'] ?? '').split(';')[0] };
 };
 
-// Accounts made the way staff make them: setup link -> password -> authenticator.
+// Accounts made the way staff make them: setup link -> password.
 async function account(email, name, role) {
   const { staff, setupToken } = role === 'PLATFORM_SUPER_ADMIN' ? await cloud.staff.bootstrapAdmin(email, name) : await cloud.staff.create({ email, displayName: name, role }, 'cli');
   const password = randomBytes(12).toString('base64url');
-  const { cookie } = await inject('POST', '/api/v1/auth/setup', { token: setupToken, password });
-  const { body } = await inject('POST', '/api/v1/auth/totp/begin', undefined, cookie);
-  await inject('POST', '/api/v1/auth/totp/confirm', { code: totpAt(body.secret, Math.floor(Date.now() / TOTP_STEP_MS)) }, cookie);
-  return { staffId: staff?.staffId, email, role, password, totpSecret: body.secret };
+  await inject('POST', '/api/v1/auth/setup', { token: setupToken, password });
+  return { staffId: staff?.staffId, email, role, password };
 }
 
 let setupLink = null;
@@ -178,7 +167,6 @@ await cloud.app.listen({ host: '127.0.0.1', port: PORT });
 await cloud.start();
 console.log(`dev cloud: http://localhost:${PORT}  (portal from ${uiDir})`);
 if (DEMO) {
-  console.log(`demo accounts (passwords + authenticator secrets): ${accountsFile}`);
-  console.log(`current code: node backend/cloud/dev/dev-cloud.mjs code <email>`);
+  console.log(`demo accounts (email and passwords): ${accountsFile}`);
   console.log(`setup link for a new staff member: ${setupLink}`);
 }

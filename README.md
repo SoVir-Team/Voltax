@@ -166,8 +166,8 @@ The portal changes its navigation and controls according to the signed-in staff 
 
 | Screen | Built into the current interface |
 |---|---|
-| **Sign in** | Work email, password, and authenticator code |
-| **Account setup** | One-time setup link, password selection, and two-factor enrollment |
+| **Sign in** | Work email and password |
+| **Account setup** | One-time setup link and password selection |
 | **Overview** | Home/hub counts, offline hubs, software versions, support and rollout summaries |
 | **Homes** | Visible-home directory and permitted home creation |
 | **Home detail** | Hub registration/credential rotation, connectivity, version, device availability, permitted home edits, assignments/contact access, support requests, hub audit copy |
@@ -322,7 +322,7 @@ Use the firmware instructions for a **low-voltage test setup**. A generic relay 
 
 Permission rules are shared between services and enforced on the server. Signed cloud envelopes are checked for the target hub, signature, freshness, nonce replay, trusted time, actor, and grant scope. A company role never automatically becomes a household owner.
 
-Security foundations include hashed pairing/client tokens, staff password hashing and authenticator-based two-factor login, protected staff sessions, per-device MQTT credentials, private hub HTTPS tooling, append-only audit mechanisms, signed checkpoints, and signed release verification. These controls exist in code; they do not establish a completed independent security assessment.
+Security foundations include hashed pairing/client tokens, staff password hashing and email/password login, protected staff sessions, per-device MQTT credentials, private hub HTTPS tooling, append-only audit mechanisms, signed checkpoints, and signed release verification. These controls exist in code; they do not establish a completed independent security assessment.
 
 Detailed policies: [permission matrix](docs/security/permission-matrix.md), [threat model](docs/security/threat-model.md), [data classification](docs/security/data-classification.md), [audit threat model](docs/security/audit-threat-model.md), and [security policy](SECURITY.md).
 
@@ -361,7 +361,7 @@ MQTT on the **device LAN is currently plaintext**. Production transport hardenin
 |---|---|---|
 | **Home application** | Pairing, control, rooms/search, schedules, simple rules, member scopes, support consent, updates, themes, PWA/push UI | Production build and representative simulator/browser captures; complete role/device/browser acceptance remains |
 | **Hub services** | Local API/live events, SQLite, commands, rules, device permissions, audit, signed cloud-link intake, support/update services | Automated PC tests pass; real Pi/device/network acceptance pending |
-| **Cloud services** | Staff MFA/session auth, homes, assignments, grants, notices, telemetry, audit/checkpoints, release registry, rollout engine | Automated tests and service harnesses exist; public production deployment not established |
+| **Cloud services** | Staff password/session auth, homes, assignments, grants, notices, telemetry, audit/checkpoints, release registry, rollout engine | Automated tests and service harnesses exist; public production deployment not established |
 | **Company portal** | Overview, homes/detail, support tools, fleet/rollout, releases, audit, staff, settings and PWA | Builds and representative pages captured; full interactive/role/browser coverage pending |
 | **Device firmware** | One-channel ESPHome relay with local push button and published BOOT input | Configuration exists; compile/flash/bench acceptance not performed for this README |
 | **Pi operations** | Provisioning, hardened containers, supervision, backups, signed updates and rollback tooling | Scripts and host-test harness exist; real device update/recovery/power-cut rehearsal pending |
@@ -401,6 +401,21 @@ These are acceptance priorities, not delivery dates or claims that a production 
 
 ## Run it locally
 
+### Real services with persistent data (Windows)
+
+To use the actual applications with your own accounts and retained data:
+
+```powershell
+cd "D:\Voltax-Home-Automation"
+npm install
+npm run build
+node .\tools\run-local.mjs --admin-email joylan928@gmail.com
+```
+
+Open the **customer app at http://localhost:8088** and the **company portal at http://localhost:8098**. The terminal prints the customer pairing code and the first admin setup link. For a new installation, set a password of at least 12 characters using the setup link. Later sign-ins require email and password. Create support/installer accounts from **Staff** and assign them to your home; use separate browser profiles for the different roles.
+
+This launcher uses real PostgreSQL, Mosquitto, SQLite and app services, with data under `.secrets/local/`. It targets this Windows workstation's installed PostgreSQL 18/Mosquitto binaries and binds to loopback. It creates no simulated devices or support approvals. Device control requires hardware; remote support requires real consent, clock synchronization and notification configuration. [Complete local setup and role-login instructions →](docs/runbooks/local-apps.md)
+
 ### Customer app and simulated home
 
 Requires **Node.js 24 or newer** and npm. From the repository root:
@@ -427,11 +442,7 @@ npm run build
 node backend/cloud/dev/dev-cloud.mjs --demo
 ```
 
-Open **http://localhost:8090**. The demo prints the location of its generated staff accounts under the ignored `backend/cloud/.dev-data/` directory. It creates temporary admin/support/installer identities and sample homes/releases. Use the generated account credentials, and obtain its current demonstration authenticator code with:
-
-```bash
-node backend/cloud/dev/dev-cloud.mjs code admin@voltex.test
-```
+Open **http://localhost:8090**. The demo prints the location of its generated staff accounts under the ignored `backend/cloud/.dev-data/` directory. It creates temporary admin/support/installer identities and sample homes/releases. Use the generated email and password to sign in. No authenticator code is required.
 
 For company UI hot reload, keep the demo cloud running and start:
 

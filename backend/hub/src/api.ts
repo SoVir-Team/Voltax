@@ -29,6 +29,8 @@ import {
 } from '@voltax/contracts';
 import type { z } from 'zod';
 import type { AuditLog } from './audit.js';
+import { CUSTOMER_PUBLIC_ROUTES, customerRoutes, customerOriginAllowed, readCustomerCookie } from './customer-routes.js';
+import type { CustomerAccounts } from './customer-accounts.js';
 import type { Auth, Client, DeviceScope } from './auth.js';
 import type { AutomationEngine } from './automations.js';
 import type { CommandManager } from './commands.js';
@@ -48,6 +50,7 @@ export interface ApiDeps {
   events: EventLog;
   commands: CommandManager;
   auth: Auth;
+  customers: CustomerAccounts;
   audit: AuditLog;
   grants: SupportGrants;
   updates: UpdateService;
@@ -62,7 +65,7 @@ export interface ApiDeps {
 export type RouteGuard = { public: true } | { action: HomeAction; ws?: true };
 
 /** The only routes reachable without a client token. */
-export const PUBLIC_API_ROUTES = ['GET /api/v1/health', 'GET /api/v1/hub/identity', 'POST /api/v1/pair'] as const;
+export const PUBLIC_API_ROUTES = ['GET /api/v1/health', 'GET /api/v1/hub/identity', 'POST /api/v1/pair', ...CUSTOMER_PUBLIC_ROUTES] as const;
 
 const WS_AUTH_TIMEOUT_MS = 5000;
 const UNAUTH_AUDIT_INTERVAL_MS = 60_000;
@@ -125,7 +128,7 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     if (!guard) return reply.status(403).send({ error: 'forbidden' }); // unreachable: onRoute refuses unguarded routes
     if ('public' in guard || guard.ws) return; // the WebSocket authenticates in its first message
     const header = req.headers.authorization;
-    const client = deps.auth.authenticate(header?.startsWith('Bearer ') ? header.slice(7) : undefined);
+    const client = deps.customers.authenticate(readCustomerCookie(req.headers.cookie)) ?? deps.auth.authenticate(header?.startsWith('Bearer ') ? header.slice(7) : undefined);
     if (!client) {
       auditUnauthenticated(req);
       return reply.status(401).send({ error: 'unauthorized' });
@@ -151,6 +154,8 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     deps.audit.append({ actor: actor(req), action, outcome: 'denied', target, details: { reason: 'device not granted' } });
     return reply.status(404).send({ error });
   };
+
+  customerRoutes(app, deps.customers, deps.auth);
 
   // --- public ---
   app.get('/api/v1/health', open, async () => deps.health());
@@ -380,7 +385,9 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
         msg = null;
       }
       const parsed = wsClientMessageSchema.safeParse(msg);
-      const client = parsed.success ? deps.auth.authenticate(parsed.data.token) : null;
+      const cookieMode = parsed.success && parsed.data.token === 'cookie';
+      const sessionCookie = readCustomerCookie(req.headers.cookie);
+      const client = parsed.success ? (cookieMode && customerOriginAllowed(req, deps.customers) ? deps.customers.authenticate(sessionCookie) : deps.auth.authenticate(parsed.data.token)) : null;
       if (!parsed.success || !client || !homeScope(homeRoleOf(client.role), 'events.read')) {
         auditUnauthenticated(req);
         send({ type: 'error', error: 'unauthorized' });
@@ -390,7 +397,7 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
       // The scope is re-read for every event, so a change to a member's devices applies at once.
       const visible = (event: HubEvent) => {
         const current = deps.auth.get(client.clientId); // role and devices as they are now
-        return current !== null && eventVisible(deps.auth.deviceScope(current), event);
+        return current !== null && (!cookieMode || !!deps.customers.authenticate(sessionCookie)) && eventVisible(deps.auth.deviceScope(current), event);
       };
       // Replay then subscribe in the same tick: SQLite calls are synchronous, so no event can slip between.
       let lastSent = parsed.data.resumeAfterSeq ?? deps.events.lastSeq();
@@ -399,7 +406,10 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
         lastSent = event.seq;
       }
       send({ type: 'ready', lastSeq: lastSent });
+      const sessionCheck = setInterval(() => { if (cookieMode && !deps.customers.authenticate(sessionCookie)) socket.close(4401, 'session ended'); }, 5000);
+      sessionCheck.unref();
       cleanup = [
+        () => clearInterval(sessionCheck),
         deps.events.subscribe((event) => {
           if (event.seq > lastSent) {
             lastSent = event.seq;

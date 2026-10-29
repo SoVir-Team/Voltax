@@ -37,7 +37,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </section>
       </div>
     );
-  if (!ready || !me?.mfa) return <div className="boot" aria-busy="true" aria-label="Loading" />;
+  if (!ready || !me) return <div className="boot" aria-busy="true" aria-label="Loading" />;
 
   const section = SECTION_OF[path] ?? path;
   const current = (href: string) => (href === '/' ? section === '/' : section.startsWith(href));

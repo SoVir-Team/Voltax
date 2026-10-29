@@ -9,7 +9,7 @@ const optional = z
 const schema = z
   .object({
     DATABASE_URL: z.string().min(1),
-    // 32-byte key that seals TOTP secrets at rest. Generate with: openssl rand -hex 32. Never commit it.
+    // Legacy data-encryption key retained for configuration compatibility. Never commit it.
     CLOUD_DATA_KEY: z.string().min(1),
     HOST: z.string().default('0.0.0.0'),
     PORT: z.coerce.number().int().min(1).max(65535).default(8080),

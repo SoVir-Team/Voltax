@@ -21,6 +21,7 @@ export const PLATFORM_ACTIONS = [
   'staff.read',
   'staff.manage', // create/disable staff, change roles, reset MFA
   'assignment.manage',
+  'home.onboard',
   'home.create',
   'home.update',
   'home.read', // operational metadata: name, hub id, connectivity, versions
@@ -57,6 +58,7 @@ export const PLATFORM_PERMISSIONS: Record<PlatformAction, Partial<Record<Platfor
   'staff.read': { [SA]: 'platform' },
   'staff.manage': { [SA]: 'platform' },
   'assignment.manage': { [SA]: 'platform' },
+  'home.onboard': { [SA]: 'platform' },
   'home.create': { [SA]: 'platform' },
   'home.update': { [SA]: 'platform' },
   'home.read': { [SA]: 'platform', [SUP]: 'assigned', [INS]: 'assigned' },

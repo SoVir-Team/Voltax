@@ -18,6 +18,7 @@ import { supportRoutes } from './routes-support.js';
 import type { ObjectStore } from './s3.js';
 import { EnvelopeSigner } from './signer.js';
 import { StaffService } from './staff.js';
+import { CustomerOnboarding } from './customer-onboarding.js';
 
 export interface CloudOptions {
   db: Db;
@@ -89,6 +90,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
   };
   const linked = opts.broker || opts.transport ? transport : null;
   const grants = new GrantService(opts.db, audit, homes, notifications, signer, linked);
+  const onboarding = new CustomerOnboarding(homes, audit, signer, transport);
   const fleet = new FleetService(opts.db, audit, signer, linked, opts.releasePublicKey ?? null);
 
   // Staff alerts when the owner decides or the session ends (best effort, never a gate).
@@ -106,6 +108,10 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
   const route = async (hubId: string, msg: HubMessage): Promise<void> => {
     if (!(await homes.homeOfHub(hubId))) return; // not a registered hub (the broker would not let it in)
     switch (msg.type) {
+      case 'customer.ready':
+      case 'customer.onboard.result':
+        onboarding.handle(hubId, msg);
+        return;
       case 'telemetry':
         return homes.recordTelemetry(hubId, msg.telemetry);
       case 'audit.batch':
@@ -131,7 +137,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
       homes,
       config: { ...opts.api, commandPublicKeyPem: signer?.publicKeyPem },
       verifyAudit: () => checkpoints.verify(checkpointPublicKeyPem),
-      plugins: [supportRoutes({ grants, notifications, homes, hubAudit, checkpoints, push }), fleetRoutes(fleet)],
+      plugins: [onboarding.routes(), supportRoutes({ grants, notifications, homes, hubAudit, checkpoints, push }), fleetRoutes(fleet)],
     },
     opts.server,
   );
@@ -176,6 +182,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
     async close() {
       clearInterval(exportTimer);
       clearInterval(retentionTimer);
+      onboarding.close();
       grants.stop();
       fleet.stop();
       notifications.stop();

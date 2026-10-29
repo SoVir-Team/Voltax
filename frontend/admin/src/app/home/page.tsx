@@ -74,6 +74,8 @@ function HomeDetail() {
             {can('hub.register') && <RegisterHub homeId={h.homeId} current={h.hub?.hubId ?? null} onDone={() => void home.reload()} />}
           </Card>
 
+          {can('home.onboard') && h.hub && <OwnerOnboarding homeId={h.homeId} />}
+
           {can('grant.read') && (
             <section id="grants" className="stack">
               {open.map((g) => (
@@ -375,4 +377,28 @@ function HubAudit({ homeId }: { homeId: string }) {
       )}
     </Card>
   );
+}
+
+function OwnerOnboarding({ homeId }: { homeId: string }) {
+  const status = useLoad(() => api<{ available: boolean; claimed: boolean | null }>(`/homes/${homeId}/onboarding`), [homeId]);
+  const [email, setEmail] = useState('');
+  const [result, setResult] = useState<{ code: string; expiresAt: number; email: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function generate(e: FormEvent) {
+    e.preventDefault(); setError(null); setResult(null); setBusy(true);
+    try {
+      setResult(await api(`/homes/${homeId}/onboarding`, { method: 'POST', body: { email } }));
+      void status.reload();
+    } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
+  }
+  return <Card title="Homeowner setup">
+    {status.data?.claimed ? <p className="small muted">The homeowner has created their account. Family access is managed in the customer app.</p> : <form className="form" onSubmit={e => void generate(e)}>
+      <p className="small muted">Generate a one-time code for the homeowner. They use it to create their customer account. A new code replaces the previous unused code.</p>
+      <label className="field">Homeowner email<input type="email" autoComplete="email" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
+      {error && <p className="note" role="alert">{error}</p>}
+      <button className="btn" disabled={busy}>{busy ? 'Requesting code?' : 'Generate homeowner code'}</button>
+    </form>}
+    {result && <SecretBox title="One-time homeowner code" value={result.code} note={`For ${result.email}. Expires ${dateTime(result.expiresAt)}. Copy and give it to the homeowner. Keep it private.`} />}
+  </Card>;
 }

@@ -39,7 +39,7 @@ containers compete with the cloud for CPU (a pessimistic arrangement for the clo
   300 concurrent company portal users:
   - **Mix:** 10 `PLATFORM_SUPER_ADMIN`, 200 `PLATFORM_SUPPORT` and 90 `INSTALLER`.
   - **Assignments:** each support user is assigned to 6 homes and each installer to 4.
-  - **Accounts:** every user has its own account (password + TOTP), signs in through the API and
+  - **Accounts:** every user has its own account (email + password), signs in through the API and
     keeps its session.
   - **Client address:** each user has its own client address, given in `X-Forwarded-For` the way
     Caddy passes it in production (`TRUST_PROXY`). Per-address limits therefore apply per user.

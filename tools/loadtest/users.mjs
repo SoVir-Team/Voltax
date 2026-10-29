@@ -3,10 +3,9 @@
 // argv = <plan.json>. Messages in: {type:'start', measureStart, measureEnd}. Out: {type:'results'}.
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { between, load, pick, sleep } from './lib.mjs';
+import { between, pick, sleep } from './lib.mjs';
 
 const plan = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-const { totpAt, TOTP_STEP_MS } = await load('backend/cloud/dist/crypto.js');
 const BASE = plan.cloudUrl;
 const TIMEOUT_MS = 10_000;
 
@@ -84,10 +83,7 @@ async function call(user, method, path, template, { body, expect = [200], kind =
 // --- users ---------------------------------------------------------------------------------------
 async function login(user) {
   for (let attempt = 0; attempt < 4; attempt++) {
-    const step = Math.max(Math.floor(Date.now() / TOTP_STEP_MS), user.lastStep + 1);
-    if (step > Math.floor(Date.now() / TOTP_STEP_MS) + 1) await sleep(TOTP_STEP_MS);
-    user.lastStep = step;
-    const res = await call(user, 'POST', '/api/v1/auth/login', '/auth/login', { body: { email: user.email, password: user.password, code: totpAt(user.secret, step) } });
+    const res = await call(user, 'POST', '/api/v1/auth/login', '/auth/login', { body: { email: user.email, password: user.password } });
     if (res.status === 200 && user.setCookie) {
       user.cookie = user.setCookie.map((c) => c.split(';')[0]).join('; ');
       logins.ok++;
@@ -241,9 +237,9 @@ process.on('message', async (m) => {
   if (m?.type === 'start') {
     measureStart = m.measureStart;
     measureEnd = m.measureEnd;
-    const users = plan.users.map((u) => ({ ...u, cookie: null, setCookie: null, lastStep: u.lastStep ?? 0, endedGrants: [] }));
+    const users = plan.users.map((u) => ({ ...u, cookie: null, setCookie: null, endedGrants: [] }));
     const runners = users.map((u) => runUser(u, between(0, m.rampMs)));
-    const sampler = { ...plan.sampler, cookie: null, setCookie: null, lastStep: 0, endedGrants: [] };
+    const sampler = { ...plan.sampler, cookie: null, setCookie: null, endedGrants: [] };
     if (await login(sampler)) void fleetSampler(sampler);
     await sleep(measureEnd - Date.now());
     stopping = true;
