@@ -23,12 +23,45 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - name: Build web app (static export served by the hub)
         run: npm run build -w frontend/web
       - name: Build admin portal (static export served by the cloud)
         run: npm run build -w frontend/admin
+
+  audit:
+    name: Production dependency audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm audit --omit=dev
+
+  postgres:
+    name: Cloud tests on PostgreSQL 18
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install PostgreSQL 18 server binaries (PGDG)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-18
+      - run: npm ci
+      - run: npm run build -w shared/contracts
+      # A throwaway cluster (initdb in a temp folder, own port, 127.0.0.1 only): triggers, GRANTs, roles.
+      - run: npm run test:pg
+        env:
+          PG_BIN: /usr/lib/postgresql/18/bin
 
   shell:
     name: Shell script syntax

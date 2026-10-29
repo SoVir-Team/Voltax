@@ -8,7 +8,7 @@ import { generateKeyPairSync, randomUUID, sign } from 'node:crypto';
 import { createServer } from 'node:net';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import aedes from 'aedes';
+import { Aedes } from 'aedes';
 import mqtt from 'mqtt';
 import { createHub } from '../dist/hub.js';
 
@@ -20,7 +20,7 @@ const MQTT_PORT = Number(process.env.MQTT_PORT ?? 18830);
 const dataDir = fileURLToPath(new URL('../.dev-data/', import.meta.url));
 mkdirSync(dataDir, { recursive: true });
 
-const broker = aedes.createBroker();
+const broker = await Aedes.createBroker();
 await new Promise((r) => createServer(broker.handle).listen(MQTT_PORT, '127.0.0.1', r));
 const MQTT_URL = `mqtt://127.0.0.1:${MQTT_PORT}`;
 

@@ -28,7 +28,7 @@
     "@types/node": "^24.0.0",
     "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.0",
-    "aedes": "^0.51.0",
+    "aedes": "^1.2.0",
     "typescript": "^5.9.0",
     "vitest": "^5.0.5",
     "ws": "^8.18.0"

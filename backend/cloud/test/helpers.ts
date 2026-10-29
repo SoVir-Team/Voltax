@@ -84,6 +84,7 @@ export interface TestCloud extends Cloud {
   /** Returns a TOTP code for a step after the last accepted one (codes are single-use). */
   nextCode(staffId: string, secret: string): Promise<string>;
   login(s: Pick<TestStaff, 'email' | 'staffId' | 'secret'>): Promise<string>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tests read arbitrary response JSON
   req(method: string, url: string, opts?: { cookie?: string; body?: unknown; headers?: Record<string, string> }): Promise<{ status: number; body: any; headers: Record<string, unknown> }>;
   addHome(name?: string): Promise<string>;
   assign(staffId: string, homeId: string, expiresAt?: number | null): Promise<string>;

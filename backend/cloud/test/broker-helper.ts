@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect, createServer, type AddressInfo, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import aedes, { type Client } from 'aedes';
+import { Aedes, type Client } from 'aedes';
 import { brokerAllows, CLOUD_SERVICE_USER } from '../src/broker.js';
 
 /** Which real broker the end-to-end test runs on (npm run test:brokers sets this). */
@@ -49,7 +49,7 @@ async function waitForPort(port: number, timeoutMs: number, what: string): Promi
 export async function startCloudBroker(authenticate: (username: string, password: string) => Promise<boolean>, port = 0): Promise<TestBroker> {
   const users = new WeakMap<Client, string>();
   const denied: string[] = [];
-  const broker = aedes.createBroker({
+  const broker = await Aedes.createBroker({
     authenticate: (client, username, password, done) => {
       const user = username ?? '';
       authenticate(user, password?.toString() ?? '')

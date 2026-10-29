@@ -31,7 +31,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/web-push": "^3.6.4",
-    "aedes": "^0.51.0",
+    "aedes": "^1.2.0",
     "typescript": "^5.9.0",
     "vitest": "^5.0.5"
   }

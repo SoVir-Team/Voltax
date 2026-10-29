@@ -21,6 +21,16 @@
     "test:pg": "npm run test:pg -w backend/cloud",
     "test:brokers": "npm run test:brokers -w backend/cloud",
     "test:services": "npm run test:services -w backend/cloud",
-    "dev:admin": "npm run dev -w frontend/admin"
+    "dev:admin": "npm run dev -w frontend/admin",
+    "lint": "eslint .",
+    "audit:prod": "npm audit --omit=dev"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "^16.4.3",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "typescript-eslint": "^8.72.1"
   }
 }

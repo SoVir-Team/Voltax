@@ -9,7 +9,7 @@
 //         update offers, and the "owner" approves support requests after a few seconds. On a real hub
 //         the owner decides in their app; this simulation exists only to click through the portal.
 // code <email>  prints the current authenticator code for a demo account.
-import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createCloud } from '../dist/cloud.js';

@@ -47,7 +47,7 @@ export class EnvelopeVerifier {
     const signed = signedEnvelopeSchema.safeParse(raw);
     if (!signed.success) return { ok: false, reason: 'malformed envelope' };
 
-    let sigOk = false;
+    let sigOk: boolean;
     try {
       sigOk = verifySignature(null, Buffer.from(signed.data.payload, 'utf8'), this.key, Buffer.from(signed.data.sig, 'base64'));
     } catch {

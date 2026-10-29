@@ -71,7 +71,7 @@ export class CloudLink {
     this.client.on('error', (err) => this.log.warn({ err: err.message }, 'cloud link error'));
     this.client.on('message', (topic, payload) => {
       if (topic !== cloudDownTopic(this.config.hubId)) return;
-      let raw: unknown = null;
+      let raw: unknown;
       try {
         raw = JSON.parse(payload.toString('utf8'));
       } catch {
