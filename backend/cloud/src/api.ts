@@ -42,7 +42,15 @@ export interface CloudApiConfig {
   loginLimitPerMinute?: number;
   /** Static export of frontend/admin, served on the API's origin (same-origin cookies, no CORS). */
   uiDir?: string;
+  /**
+   * Local launcher only: pages (the home app) that may send a staff sign-in straight to
+   * POST /api/v1/auth/login, so one sign-in page serves homeowners and staff. Nothing else is
+   * opened cross-origin. Never set for real homes: staff must not type passwords on a home hub's page.
+   */
+  signInOrigins?: string[];
 }
+
+const LOGIN_ROUTE = '/api/v1/auth/login';
 
 // Portal pages: same-origin everything. Inline scripts/styles are the Next.js static export's
 // bootstrap data and the theme snippet; nothing is loaded from another origin.
@@ -94,6 +102,20 @@ export async function buildCloudApi(deps: CloudApiDeps, serverOptions: FastifySe
   app.decorateRequest('scope', undefined);
   // JSON only: a cross-site form post (text/plain, urlencoded) cannot reach a handler.
   app.removeContentTypeParser('text/plain');
+
+  // Shared sign-in page (signInOrigins): CORS for the login route only, for the listed origins only.
+  const signInOrigin = (req: FastifyRequest): string | undefined => {
+    const origin = req.headers.origin;
+    return origin && req.url === LOGIN_ROUTE && config.signInOrigins?.includes(origin) ? origin : undefined;
+  };
+  app.addHook('onRequest', async (req, reply) => {
+    const origin = signInOrigin(req);
+    if (!origin) return;
+    reply.header('access-control-allow-origin', origin).header('access-control-allow-credentials', 'true').header('vary', 'Origin');
+    if (req.method === 'OPTIONS') {
+      return reply.status(204).header('access-control-allow-methods', 'POST').header('access-control-allow-headers', 'content-type').header('access-control-max-age', '600').send();
+    }
+  });
 
   app.addHook('onRoute', (route) => {
     const guard = (route.config as { guard?: CloudGuard } | undefined)?.guard;
@@ -147,7 +169,7 @@ export async function buildCloudApi(deps: CloudApiDeps, serverOptions: FastifySe
     if (!req.url.startsWith('/api/')) return;
     const guard = (req.routeOptions.config as { guard?: CloudGuard } | undefined)?.guard;
     if (!guard) return reply.status(404).send({ error: 'not_found', message: 'not found' }); // unknown /api path
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !sameOrigin(req, config.publicOrigin)) {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !sameOrigin(req, config.publicOrigin) && !signInOrigin(req)) {
       return reply.status(403).send({ error: 'forbidden', message: 'cross-origin request refused' });
     }
     if ('public' in guard) return;

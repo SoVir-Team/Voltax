@@ -16,10 +16,11 @@ const HUB_ID = 'dev-hub';
 const DEMO = process.argv.includes('--demo');
 const cloudKey = DEMO ? generateKeyPairSync('ed25519') : null;
 const PORT = Number(process.env.PORT ?? 8080);
-const MQTT_PORT = Number(process.env.MQTT_PORT ?? 18830);
+// A second dev hub (PORT=8081) gets its own broker port and data, beside one already on 8080.
+const MQTT_PORT = Number(process.env.MQTT_PORT ?? 18830 + PORT - 8080);
 // --mailpit: customer email to a local Mailpit (docker run -p 1025:1025 -p 8025:8025 axllent/mailpit).
 const SMTP_URL = process.env.DEV_SMTP_URL ?? (process.argv.includes('--mailpit') ? 'smtp://127.0.0.1:1025' : undefined);
-const dataDir = fileURLToPath(new URL('../.dev-data/', import.meta.url));
+const dataDir = fileURLToPath(new URL(PORT === 8080 ? '../.dev-data/' : `../.dev-data/port-${PORT}/`, import.meta.url));
 mkdirSync(dataDir, { recursive: true });
 
 const broker = await Aedes.createBroker();
@@ -77,6 +78,7 @@ const hub = await createHub(
     // Household accounts: invitation links open this hub; email goes only to DEV_SMTP_URL (e.g. a local
     // Mailpit), never to a real provider unless you point it there.
     CUSTOMER_ORIGIN: `http://localhost:${PORT}`,
+    STAFF_PORTAL_URL: process.env.DEV_STAFF_PORTAL ?? 'http://localhost:8090', // the dev cloud: staff can sign in on this page too
     ALLOW_INSECURE_HTTP: true,
     ...(SMTP_URL ? { CUSTOMER_SMTP_URL: SMTP_URL, CUSTOMER_SMTP_FROM: 'home@voltex.local' } : {}),
   },

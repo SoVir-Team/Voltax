@@ -116,7 +116,7 @@ cloud = await createCloud({
   commandKeyPem: pem(),
   auditKeyPem: pem(),
   releasePublicKey: releasePub,
-  api: { cookieSecure: false, uiDir },
+  api: { cookieSecure: false, uiDir, signInOrigins: ['http://localhost:8080', 'http://localhost:8081'] }, // dev hubs' sign-in pages sign staff in here too
   server: { logger: { level: 'warn' } },
   ...(DEMO ? { transport, email: consoleEmail } : {}),
 });

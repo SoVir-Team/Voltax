@@ -412,7 +412,9 @@ npm run build
 node .\tools\run-local.mjs --admin-email joylan928@gmail.com
 ```
 
-Open the **customer app at http://localhost:8088** and the **company portal at http://localhost:8098**. The terminal prints the customer pairing code and the first admin setup link. For a new installation, set a password of at least 12 characters using the setup link. Later sign-ins require email and password. Create support/installer accounts from **Staff** and assign them to your home; use separate browser profiles for the different roles.
+Everyone signs in at **http://localhost:8088**: homeowners and family see their home; admin and staff accounts open the company dashboard (http://localhost:8098) automatically. For a new installation the terminal prints the first admin setup link; set a password of at least 12 characters there. The admin then generates the homeowner's one-time code in **Homes > My Home > Homeowner setup**; the homeowner enters it at 8088 ("New homeowner? Enter your code"), creates an account and signs in, and invites family by email from **Access**. Invitation and password-reset emails need SMTP: put `{"user", "password", "from"}` for a Gmail app password in the git-ignored `.secrets/local/customer-mail.json`. Create support/installer accounts from **Staff** and assign them to your home; use separate browser profiles for the different roles.
+
+The shared sign-in page is for this workstation only: real home hubs do not offer staff sign-in, so staff never type their passwords on a page served by a device in someone's home.
 
 This launcher uses real PostgreSQL, Mosquitto, SQLite and app services, with data under `.secrets/local/`. It targets this Windows workstation's installed PostgreSQL 18/Mosquitto binaries and binds to loopback. It creates no simulated devices or support approvals. Device control requires hardware; remote support requires real consent, clock synchronization and notification configuration. [Complete local setup and role-login instructions →](docs/runbooks/local-apps.md)
 
@@ -425,7 +427,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:8080**. The terminal prints a temporary owner pairing code. Enter it in the app and name the browser. The simulator provides three devices across living room, kitchen, and bedroom, with five on/off switches and two binary sensors. These are simulations, not connected appliances.
+Open **http://localhost:8080**. With `node backend/hub/dev/dev-hub.mjs --demo` the terminal prints a demo homeowner code for owner@voltex.local; choose "New homeowner? Enter your code", create the account and sign in. Add `--mailpit` (and run `docker run -d --name voltex-dev-mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit`) to receive invitation and reset emails at http://127.0.0.1:8025. The simulator provides three devices across living room, kitchen, and bedroom, with five on/off switches and two binary sensors. These are simulations, not connected appliances.
 
 For customer UI hot reload, leave that process running and open a second terminal:
 
@@ -442,7 +444,7 @@ npm run build
 node backend/cloud/dev/dev-cloud.mjs --demo
 ```
 
-Open **http://localhost:8090**. The demo prints the location of its generated staff accounts under the ignored `backend/cloud/.dev-data/` directory. It creates temporary admin/support/installer identities and sample homes/releases. Use the generated email and password to sign in. No authenticator code is required.
+Open **http://localhost:8090**. The demo prints the location of its generated staff accounts under the ignored `backend/cloud/.dev-data/` directory. It creates temporary admin/support/installer identities and sample homes/releases. Use the generated email and password to sign in, either here or on the dev hub's sign-in page (http://localhost:8080), which opens this dashboard for staff. No authenticator code is required.
 
 For company UI hot reload, keep the demo cloud running and start:
 

@@ -4,6 +4,7 @@ import { PASSWORD_MIN } from '@voltax/contracts';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSession } from '@/components/Session';
 import { api, ApiError } from '@/lib/api';
+import { PasswordInput } from '@/components/PasswordInput';
 
 /** Choose a password using a one-time staff setup link. */
 export default function SetupPage() {
@@ -69,11 +70,11 @@ function PasswordStep({ token }: { token: string | null }) {
       <p className="sub">At least {PASSWORD_MIN} characters. A passphrase of a few words works well.</p>
       <label className="field">
         New password
-        <input type="password" autoComplete="new-password" minLength={PASSWORD_MIN} required value={password} onChange={(e) => setPassword(e.target.value)} />
+        <PasswordInput autoComplete="new-password" minLength={PASSWORD_MIN} required value={password} onChange={(e) => setPassword(e.target.value)} />
       </label>
       <label className="field">
         Same password again
-        <input type="password" autoComplete="new-password" minLength={PASSWORD_MIN} required value={again} onChange={(e) => setAgain(e.target.value)} />
+        <PasswordInput autoComplete="new-password" minLength={PASSWORD_MIN} required value={again} onChange={(e) => setAgain(e.target.value)} />
       </label>
       {error && (
         <p className="note" role="alert">

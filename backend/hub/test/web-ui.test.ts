@@ -51,3 +51,20 @@ describe('web app security headers', () => {
     expect(res.headers['content-security-policy']).toBeUndefined();
   });
 });
+
+describe('shared sign-in page (local launcher only)', () => {
+  it('is off by default: no staff portal in the identity and nothing else in the policy', async () => {
+    expect((await env.hub.app.inject({ method: 'GET', url: '/api/v1/hub/identity' })).json().staffPortal).toBeUndefined();
+  });
+
+  it('when configured, names the staff portal and lets the page reach only that origin', async () => {
+    const local = await startEnv({ connectDevice: false, uiDir: ui, staffPortal: 'http://localhost:8098/' });
+    try {
+      expect((await local.hub.app.inject({ method: 'GET', url: '/api/v1/hub/identity' })).json().staffPortal).toBe('http://localhost:8098');
+      const csp = String((await local.hub.app.inject({ method: 'GET', url: '/', headers: { host: 'localhost:8088' } })).headers['content-security-policy']);
+      expect(csp).toContain("connect-src 'self' wss://localhost:8088 ws://localhost:8088 http://localhost:8098;");
+    } finally {
+      await local.close();
+    }
+  });
+});

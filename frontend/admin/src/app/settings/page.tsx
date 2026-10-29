@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 import { dateTime } from '@/lib/format';
 import { ROLE_LABEL } from '@/lib/nav';
 import { currentSubscription, pushSupported, subscribe } from '@/lib/push';
+import { PasswordInput } from '@/components/PasswordInput';
 
 export default function SettingsPage() {
   const { me, signOut } = useSession();
@@ -61,11 +62,11 @@ function ChangePassword() {
       <form className="form" onSubmit={(e) => void submit(e)}>
         <label className="field">
           Current password
-          <input type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} />
+          <PasswordInput autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} />
         </label>
         <label className="field">
           New password <span className="hint">at least {PASSWORD_MIN} characters</span>
-          <input type="password" autoComplete="new-password" minLength={PASSWORD_MIN} required value={next} onChange={(e) => setNext(e.target.value)} />
+          <PasswordInput autoComplete="new-password" minLength={PASSWORD_MIN} required value={next} onChange={(e) => setNext(e.target.value)} />
         </label>
         <button className="btn sm" disabled={busy}>
           Change password

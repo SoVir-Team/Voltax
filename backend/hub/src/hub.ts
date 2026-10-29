@@ -49,6 +49,7 @@ type HubConfig = Pick<
   Partial<Pick<Config, 'CLOUD_URL' | 'CLOUD_PASSWORD' | 'CLOUD_CA' | 'TELEMETRY_INTERVAL_MS' | 'UPDATE_DIR'>> & {
     UI_DIR?: string;
     CUSTOMER_ORIGIN?: string;
+    STAFF_PORTAL_URL?: string;
     CUSTOMER_SMTP_URL?: string;
     CUSTOMER_SMTP_FROM?: string;
     ALLOW_INSECURE_HTTP?: boolean;
@@ -196,6 +197,7 @@ export async function createHub(config: HubConfig, serverOptions: FastifyServerO
       automations,
       health,
       uiDir: config.UI_DIR,
+      ...(config.STAFF_PORTAL_URL ? { staffPortal: new URL(config.STAFF_PORTAL_URL).origin } : {}),
     },
     serverOptions,
   );

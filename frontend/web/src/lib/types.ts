@@ -20,6 +20,8 @@ export interface HubIdentity {
   hubId: string;
   name: string;
   version: string;
+  /** Local launcher only: staff who sign in on this page go to this admin portal. */
+  staffPortal?: string;
 }
 
 export interface PairResult {

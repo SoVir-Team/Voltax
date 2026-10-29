@@ -151,7 +151,8 @@ async function main() {
     commandKeyPem: readFileSync(join(dir, 'command.key'), 'utf8'),
     auditKeyPem: readFileSync(join(dir, 'audit.key'), 'utf8'),
     migrate: false,
-    api: { cookieSecure: false, publicOrigin: adminOrigin, uiDir: join(root, 'frontend/admin/out') },
+    // signInOrigins: the home app's sign-in page also signs staff in here (this workstation only).
+    api: { cookieSecure: false, publicOrigin: adminOrigin, uiDir: join(root, 'frontend/admin/out'), signInOrigins: [customerOrigin] },
     server: { logger: { level: 'warn' } },
     broker: { url: `mqtt://127.0.0.1:${ports.cloudMqtt}`, password: state.servicePassword },
   });
@@ -211,7 +212,7 @@ async function main() {
   }
   const { createHub } = await import('../backend/hub/dist/hub.js');
   hub = await createHub({
-    CUSTOMER_ORIGIN: customerOrigin, ALLOW_INSECURE_HTTP: true,
+    CUSTOMER_ORIGIN: customerOrigin, ALLOW_INSECURE_HTTP: true, STAFF_PORTAL_URL: adminOrigin,
     CUSTOMER_SMTP_URL: customerMail.smtpUrl ?? process.env.CUSTOMER_SMTP_URL, CUSTOMER_SMTP_FROM: customerMail.from ?? process.env.CUSTOMER_SMTP_FROM,
     HUB_ID: state.hubId, HUB_NAME: 'My Home', DB_PATH: join(dir, 'hub', 'hub.db'), BACKUP_DIR: join(dir, 'backups'),
     MQTT_URL: `mqtt://127.0.0.1:${ports.mqtt}`, MQTT_USERNAME: 'hub', MQTT_PASSWORD: state.mqttPassword,
@@ -229,7 +230,7 @@ async function main() {
   assert.equal(rights.can_update, false, 'The app database role must not rewrite audit records.');
   for (const url of [homeUrl, adminUrl]) assert.equal((await fetch(`${url}/api/v1/health`)).status, 200);
   assert.equal((await fetch(`${adminUrl}/api/v1/staff`)).status, 401);
-  console.log(`\nVOLTEX real local services (persistent data; no simulated devices)\nCustomer: ${homeUrl}\nHomeowner setup: generate the initial code in Admin > Homes > My Home > Homeowner setup\nAdmin: ${adminOrigin}\nAdmin email: ${email}`);
+  console.log(`\nVOLTEX real local services (persistent data; no simulated devices)\nSign in (homeowners, family, admin and staff): ${homeUrl}\n  Admin and staff accounts open the admin dashboard (${adminOrigin}) after signing in.\nHomeowner setup: generate the initial code in Admin > Homes > My Home > Homeowner setup\nAdmin email: ${email}`);
   if (!admin.setupComplete) {
     const setupUrl = state.setupToken ? `${adminOrigin}/setup/?token=${encodeURIComponent(state.setupToken)}` : `${adminOrigin}/setup/`;
     writeFileSync(join(dir, 'admin-setup-url.txt'), setupUrl + '\n', { mode: 0o600 });

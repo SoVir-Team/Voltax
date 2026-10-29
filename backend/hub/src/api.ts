@@ -59,6 +59,8 @@ export interface ApiDeps {
   automations: AutomationEngine;
   health: () => HealthView;
   uiDir?: string;
+  /** Origin of the staff portal the sign-in page may also sign staff in to (local launcher only). */
+  staffPortal?: string;
 }
 
 /** Every /api route declares exactly one of these; a route without one makes startup fail. */
@@ -99,7 +101,7 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     reply.header('x-frame-options', 'DENY');
     reply.header('referrer-policy', 'no-referrer');
     if (req.url.startsWith('/api/')) reply.header('cache-control', 'no-store');
-    else reply.header('content-security-policy', webCsp(req.headers.host));
+    else reply.header('content-security-policy', webCsp(req.headers.host, deps.staffPortal));
     return payload;
   });
 
@@ -160,7 +162,7 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
 
   // --- public ---
   app.get('/api/v1/health', open, async () => deps.health());
-  app.get('/api/v1/hub/identity', open, async () => ({ hubId: deps.hubId, name: deps.hubName, version: deps.version }));
+  app.get('/api/v1/hub/identity', open, async () => ({ hubId: deps.hubId, name: deps.hubName, version: deps.version, ...(deps.staffPortal ? { staffPortal: deps.staffPortal } : {}) }));
 
   app.post('/api/v1/pair', open, async (req, reply) => {
     const body = parse(pairRequestSchema, req.body, reply);
@@ -442,14 +444,14 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
  * scripts/styles are the Next.js static export's bootstrap and the theme snippet. The live WebSocket
  * is named explicitly (older Safari does not treat ws: as 'self'); a malformed Host is not reflected.
  */
-function webCsp(host: string | undefined): string {
+function webCsp(host: string | undefined, staffPortal?: string): string {
   const ws = host && /^[A-Za-z0-9.-]+(:\d{1,5})?$|^\[[0-9A-Fa-f:.]+\](:\d{1,5})?$/.test(host) ? ` wss://${host} ws://${host}` : '';
   return [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    `connect-src 'self'${ws}`,
+    `connect-src 'self'${ws}${staffPortal ? ` ${staffPortal}` : ''}`,
     "worker-src 'self'",
     "manifest-src 'self'",
     "object-src 'none'",

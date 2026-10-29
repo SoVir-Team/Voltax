@@ -370,3 +370,14 @@ input[readonly] { color: var(--muted); }
   .card { box-shadow: none; border: 1px solid var(--navy-2); }
   .tabbar { background: var(--card); border: 1px solid var(--navy); }
 }
+
+/* Password field with a Show/Hide button inside it. */
+.password-input { position: relative; display: block; }
+.password-input input { padding-right: 72px; }
+.password-toggle {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  border: 0; background: transparent; color: var(--sky-deep); font: inherit; font-size: 0.8125rem; font-weight: 650;
+  padding: 8px 10px; border-radius: 999px; cursor: pointer;
+}
+.password-toggle:hover { background: var(--sky-soft); }
+.password-toggle:focus-visible { outline: 2px solid var(--sky); outline-offset: 1px; }

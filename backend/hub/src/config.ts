@@ -6,6 +6,9 @@ const schema = z.object({
   HUB_ID: z.string().regex(/^[a-z0-9-]{3,40}$/, 'lowercase letters, digits and dashes'),
   HUB_NAME: z.string().default('Voltax Hub'),
   CUSTOMER_ORIGIN: z.string().url().optional(),
+  // Local launcher only: the staff portal that the home app's sign-in page also signs staff in to.
+  // Never set on a real hub: staff must not type passwords on a page served by a home's device.
+  STAFF_PORTAL_URL: z.string().url().optional(),
   CUSTOMER_SMTP_URL: z.string().optional(),
   CUSTOMER_SMTP_FROM: z.string().email().optional(),
   HOST: z.string().default('0.0.0.0'),

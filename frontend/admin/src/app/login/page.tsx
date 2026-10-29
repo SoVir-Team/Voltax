@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { useSession } from '@/components/Session';
 import { api, ApiError } from '@/lib/api';
+import { PasswordInput } from '@/components/PasswordInput';
 
 /** Staff sign in with their own email and password. */
 export default function LoginPage() {
@@ -44,7 +45,7 @@ export default function LoginPage() {
         </label>
         <label className="field">
           Password
-          <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordInput autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         {error && (
           <p className="note" role="alert">

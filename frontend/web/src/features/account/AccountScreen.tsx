@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { ApiError, COOKIE_SESSION, apiRequest } from '@/lib/api';
 import type { Role } from '@/lib/types';
 import { useHub } from '@/providers/HubProvider';
+import { PasswordInput } from '@/components/PasswordInput';
 
 // Signed-out screens (docs/customer-account-flow.md). Device controls only appear after sign-in:
 // a homeowner code or an emailed invitation only opens account setup.
@@ -22,6 +23,22 @@ const MIN_PASSWORD = 12;
 function message(err: unknown): string {
   if (err instanceof ApiError && err.status === 429) return 'Too many attempts. Please wait a few minutes and try again.';
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Local launcher only (hub.staffPortal): the same sign-in page signs VOLTEX staff in to the admin
+ * portal. The browser sends the password straight to the portal, never through the hub, and only
+ * after the hub found no home account for it. true = signed in, open the portal.
+ */
+async function staffSignIn(portal: string, email: string, password: string): Promise<boolean> {
+  let res: Response;
+  try {
+    res = await fetch(`${portal}/api/v1/auth/login`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password }) });
+  } catch {
+    return false; // portal not running: report the home sign-in result
+  }
+  if (res.status === 429) throw new ApiError('Too many attempts', 429);
+  return res.ok;
 }
 
 /** Takes an invitation secret from the address (#invite=…) and removes it, so it is not kept in history. */
@@ -110,11 +127,19 @@ export function AccountScreen() {
             busy={busy}
             onSubmit={(password) =>
               run(async () => {
-                const { data } = await apiRequest<{ clientId: string; role: Role }>('/customer/login', {
-                  method: 'POST',
-                  body: { email, password, ...(acceptInvitation ? { acceptInvitation: true } : {}) },
-                });
-                signIn({ token: COOKIE_SESSION, role: data.role, clientId: data.clientId });
+                try {
+                  const { data } = await apiRequest<{ clientId: string; role: Role }>('/customer/login', {
+                    method: 'POST',
+                    body: { email, password, ...(acceptInvitation ? { acceptInvitation: true } : {}) },
+                  });
+                  signIn({ token: COOKIE_SESSION, role: data.role, clientId: data.clientId });
+                } catch (err) {
+                  const portal = hub?.staffPortal;
+                  if (!(err instanceof ApiError && err.status === 401) || !portal || acceptInvitation) throw err;
+                  if (!(await staffSignIn(portal, email, password))) throw err;
+                  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- another origin (the admin portal), not a page of this app
+                  location.assign(`${portal}/`);
+                }
               })
             }
           >
@@ -261,7 +286,7 @@ function SignIn({ email, setEmail, busy, onSubmit, children }: { email: string; 
       </label>
       <label className="field">
         Password
-        <input type="password" autoComplete="current-password" required maxLength={256} value={password} onChange={(e) => setPassword(e.target.value)} />
+        <PasswordInput autoComplete="current-password" required maxLength={256} value={password} onChange={(e) => setPassword(e.target.value)} />
       </label>
       <button className="btn block" type="submit" disabled={busy}>
         {busy ? 'Signing in…' : 'Sign in'}
@@ -293,12 +318,12 @@ function NewPassword({ password, setPassword, confirm, setConfirm, label = 'Pass
     <>
       <label className="field">
         {label}
-        <input type="password" autoComplete="new-password" required minLength={MIN_PASSWORD} maxLength={256} value={password} onChange={(e) => setPassword(e.target.value)} />
+        <PasswordInput autoComplete="new-password" required minLength={MIN_PASSWORD} maxLength={256} value={password} onChange={(e) => setPassword(e.target.value)} />
         <span className="hint">At least {MIN_PASSWORD} characters.</span>
       </label>
       <label className="field">
         Confirm password
-        <input type="password" autoComplete="new-password" required maxLength={256} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        <PasswordInput autoComplete="new-password" required maxLength={256} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       </label>
     </>
   );

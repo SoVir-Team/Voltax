@@ -89,7 +89,7 @@ export interface LocalBroker {
 }
 
 export async function startEnv(
-  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean; cloudUrl?: string; cloudPassword?: string; localBroker?: LocalBroker; version?: string; pushSender?: PushSender | null; uiDir?: string; customer?: CustomerOptions } = {},
+  opts: { connectDevice?: boolean; dir?: string; cloudKeyPem?: string; timeSynced?: boolean; cloudUrl?: string; cloudPassword?: string; localBroker?: LocalBroker; version?: string; pushSender?: PushSender | null; uiDir?: string; customer?: CustomerOptions; staffPortal?: string } = {},
 ): Promise<TestEnv> {
   const broker = opts.localBroker ?? (await startBroker());
   const dir = opts.dir ?? mkdtempSync(join(tmpdir(), 'voltax-hub-'));
@@ -112,6 +112,7 @@ export async function startEnv(
       pushSender: opts.pushSender ?? null, // tests never reach real push services
       ...(opts.uiDir ? { UI_DIR: opts.uiDir } : {}),
       ...(opts.customer ? { customerOptions: opts.customer } : {}),
+      ...(opts.staffPortal ? { STAFF_PORTAL_URL: opts.staffPortal } : {}),
       ...(opts.cloudUrl ? { CLOUD_URL: opts.cloudUrl, CLOUD_PASSWORD: opts.cloudPassword ?? 'x', TELEMETRY_INTERVAL_MS: 5_000 } : {}),
     },
     { logger: false },
