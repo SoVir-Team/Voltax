@@ -349,9 +349,55 @@ Evidence (2026-10-29):
 
 ## P9. Load test
 
-- [ ] Spec with thresholds committed before the run
-- [ ] Simulator
-- [ ] 60-minute run, results committed
+- [x] Spec with thresholds committed before the run ([load-test-spec.md](testing/load-test-spec.md) v1, `6b505fa`, before any run)
+- [x] Simulator (`tools/loadtest/`, `afd6aec`)
+- [x] 60-minute run, results committed: **PASS on all six gates**
+  ([results](testing/load-test-results-2026-10-29.md), [JSON](testing/load-test-results-2026-10-29.json))
+
+- **Setup:** the real cloud (`dist`) on a throwaway PostgreSQL 18.6 cluster, EMQX 5.8.6 and Mailpit in
+  Docker, 120 real hubs (`createHub`) × 10 simulated ESPHome relays in 4 worker processes, 300 staff
+  users over HTTP. Everything ran on one laptop (i7-1065G7, 16 GB), so the cloud shared the CPU with
+  all of it.
+- **Command:** `node tools/loadtest/run.mjs --minutes 60 --warmup 5`, from commit `afd6aec`. Measured
+  06:15:57 to 07:15:57 UTC on 2026-10-29.
+
+Evidence (official run):
+
+| Gate | Threshold | Measured |
+|---|---|---|
+| G1 p95 | < 300 ms | 41.5 ms |
+| G2 p99 | < 1,000 ms | 84.6 ms |
+| G3 unexpected errors | < 0.1% | 0 of 136,211 |
+| G4 isolation violations | 0 | 0 API; 0 broker (260 probes, 0 control failures) |
+| G5 invalid commands accepted | 0 | 0 API; 0 of 1,564 forged; 0 of 1,549 replayed |
+| G6 hubs online | 120 at every sample | 120 at all 60 samples |
+
+- **Sessions:** 5,889 support sessions, all approved, active and finished.
+- **Commands:** 21,895, all confirmed; acknowledgement p50 36 ms, p99 364 ms.
+- **Notices:** 17,667 owner notices delivered through Mailpit.
+- **Cloud process:** average CPU 11% of one core; memory p50 225 MB, max 471 MB.
+- **Database:** 98 MB at the end.
+
+Product bugs the load test found, each fixed test-first before the official run:
+
+- `13064f3`: the cloud exited if the broker was not up in time, could stay connected but subscribed
+  to nothing, and logged broker events nowhere.
+- `a869081`: one SMTP connection per notice capped owner notices near 1/s. Support sessions stayed
+  blocked (fail-closed) for minutes.
+- `55db509`: a hub refusing a replayed envelope relabelled the original, already-confirmed command
+  as refused in the cloud.
+
+Reported, not hidden (see the results notes):
+
+- The harness's own final audit verify got 401 because its admin session sat idle past the cloud's
+  60-minute limit. That is a harness fault: the 55 verifies run under load all passed.
+- `POST /audit/verify` is the slowest endpoint (max 2,038 ms). Its cost grows with the chain, so
+  production needs incremental, checkpoint-based verification.
+- 3 diagnostics requests went unanswered in a pre-fix smoke run. The cause was not found and it did
+  not recur in the 60-minute run, which had hub-side traces on.
+
+Not verified: real hardware, production hosting, and real email or push providers. Also not
+verified: a load test with the cloud on its own machine.
 
 ## P10. Deploy and report
 

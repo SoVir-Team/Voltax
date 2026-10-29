@@ -1,0 +1,759 @@
+{
+  "cloudRestarts": [],
+  "spec": "docs/testing/load-test-spec.md (v1)",
+  "official": true,
+  "env": {
+    "startedAt": "2026-10-29T06:09:42.807Z",
+    "commit": "afd6aec",
+    "os": "Windows_NT 10.0.22621",
+    "cpu": "Intel(R) Core(TM) i7-1065G7 CPU @ 1.30GHz (8 logical)",
+    "ramGb": 16,
+    "node": "v24.21.0",
+    "docker": "29.2.1",
+    "emqx": "emqx/emqx:5.8.6",
+    "mailpit": "axllent/mailpit:v1.27",
+    "workers": 4,
+    "postgres": "18.6",
+    "endedAt": "2026-10-29T07:16:18.821Z"
+  },
+  "params": {
+    "minutes": 60,
+    "warmupMinutes": 5,
+    "hubs": 120,
+    "devicesPerHub": 10,
+    "users": 300,
+    "telemetryMs": 30000,
+    "measureStart": "2026-10-29T06:15:57.455Z",
+    "measureEnd": "2026-10-29T07:15:57.455Z"
+  },
+  "pass": true,
+  "gates": [
+    {
+      "id": "G1",
+      "what": "API latency p95, all portal requests",
+      "threshold": "< 300 ms",
+      "value": "41.5 ms",
+      "pass": true
+    },
+    {
+      "id": "G2",
+      "what": "API latency p99, all portal requests",
+      "threshold": "< 1,000 ms",
+      "value": "84.6 ms",
+      "pass": true
+    },
+    {
+      "id": "G3",
+      "what": "Unexpected errors",
+      "threshold": "< 0.1%",
+      "value": "0.000% (0 of 136211)",
+      "pass": true
+    },
+    {
+      "id": "G4",
+      "what": "Isolation violations (API + broker)",
+      "threshold": "0",
+      "value": "0 API, 0 broker",
+      "pass": true
+    },
+    {
+      "id": "G5",
+      "what": "Invalid commands accepted (API probes, forged, replayed)",
+      "threshold": "0",
+      "value": "0 API, 0 forged, 0 replayed",
+      "pass": true
+    },
+    {
+      "id": "G6",
+      "what": "Hubs online at every 1-minute sample",
+      "threshold": "120 of 120",
+      "value": "min 120 over 60 samples",
+      "pass": true
+    }
+  ],
+  "api": {
+    "overall": {
+      "count": 136211,
+      "p50": 7.8,
+      "p95": 41.5,
+      "p99": 84.6,
+      "max": 2037.7
+    },
+    "endpoints": {
+      "GET /audit": {
+        "count": 413,
+        "p50": 6.2,
+        "p95": 14.2,
+        "p99": 34.3,
+        "max": 53.4
+      },
+      "GET /audit/checkpoints": {
+        "count": 440,
+        "p50": 3.7,
+        "p95": 11.8,
+        "p99": 33.8,
+        "max": 58.3
+      },
+      "GET /auth/me": {
+        "count": 7497,
+        "p50": 3,
+        "p95": 8.5,
+        "p99": 27.5,
+        "max": 300
+      },
+      "GET /fleet/summary": {
+        "count": 5417,
+        "p50": 5.8,
+        "p95": 13.3,
+        "p99": 38.7,
+        "max": 367.1
+      },
+      "GET /grants": {
+        "count": 7875,
+        "p50": 28.2,
+        "p95": 58.4,
+        "p99": 82.2,
+        "max": 269.9
+      },
+      "GET /homes": {
+        "count": 7780,
+        "p50": 4.9,
+        "p95": 11.8,
+        "p99": 37.9,
+        "max": 443.7
+      },
+      "GET /homes/:id (unassigned)": {
+        "count": 716,
+        "p50": 6.7,
+        "p95": 16.1,
+        "p99": 44.6,
+        "max": 135.9
+      },
+      "GET /homes/:id": {
+        "count": 7397,
+        "p50": 4.7,
+        "p95": 10.5,
+        "p99": 31.2,
+        "max": 370.2
+      },
+      "GET /homes/:id/devices (unassigned)": {
+        "count": 660,
+        "p50": 6.8,
+        "p95": 15.7,
+        "p99": 36,
+        "max": 297.2
+      },
+      "GET /homes/:id/devices": {
+        "count": 7495,
+        "p50": 4.7,
+        "p95": 11.8,
+        "p99": 35.4,
+        "max": 356
+      },
+      "GET /homes/:id/grants": {
+        "count": 7270,
+        "p50": 10.2,
+        "p95": 24.5,
+        "p99": 47.8,
+        "max": 292.7
+      },
+      "GET /homes/:id/grants/:id": {
+        "count": 6610,
+        "p50": 5.7,
+        "p95": 13.8,
+        "p99": 43,
+        "max": 355.4
+      },
+      "GET /homes/:id/grants/:id/commands (list)": {
+        "count": 21892,
+        "p50": 5.8,
+        "p95": 13.9,
+        "p99": 43.3,
+        "max": 315.3
+      },
+      "GET /homes/:id/hub (unassigned)": {
+        "count": 725,
+        "p50": 6.7,
+        "p95": 15.9,
+        "p99": 49.5,
+        "max": 197.6
+      },
+      "GET /homes/:id/hub": {
+        "count": 7425,
+        "p50": 4.7,
+        "p95": 12.5,
+        "p99": 37.3,
+        "max": 352.6
+      },
+      "GET /releases": {
+        "count": 424,
+        "p50": 3.7,
+        "p95": 9.5,
+        "p99": 32.8,
+        "max": 67
+      },
+      "GET /rollouts": {
+        "count": 452,
+        "p50": 3.6,
+        "p95": 12.1,
+        "p99": 39.1,
+        "max": 474.6
+      },
+      "GET /staff": {
+        "count": 447,
+        "p50": 6.9,
+        "p95": 13.4,
+        "p99": 32.4,
+        "max": 93.1
+      },
+      "POST /audit/verify": {
+        "count": 55,
+        "p50": 483.2,
+        "p95": 1780.6,
+        "p99": 2037.7,
+        "max": 2037.7
+      },
+      "POST /homes/:id/grants (unassigned)": {
+        "count": 657,
+        "p50": 7.4,
+        "p95": 16.4,
+        "p99": 44.4,
+        "max": 202.8
+      },
+      "POST /homes/:id/grants": {
+        "count": 5485,
+        "p50": 18.9,
+        "p95": 49.8,
+        "p99": 149.4,
+        "max": 951.5
+      },
+      "POST /homes/:id/grants/:id/commands (ended or unknown grant)": {
+        "count": 2789,
+        "p50": 8.6,
+        "p95": 20.8,
+        "p99": 57.5,
+        "max": 285.2
+      },
+      "POST /homes/:id/grants/:id/commands": {
+        "count": 21895,
+        "p50": 19.3,
+        "p95": 51.5,
+        "p99": 143.4,
+        "max": 1393.7
+      },
+      "POST /homes/:id/grants/:id/diagnostics": {
+        "count": 8924,
+        "p50": 31.3,
+        "p95": 77.3,
+        "p99": 223.7,
+        "max": 1062.7
+      },
+      "POST /homes/:id/grants/:id/revoke": {
+        "count": 5471,
+        "p50": 13.8,
+        "p95": 40.5,
+        "p99": 107.7,
+        "max": 804.3
+      }
+    },
+    "counts": {
+      "measured": 136211,
+      "warmup": 9066,
+      "unexpected": 0,
+      "expectedDenials": 5547
+    },
+    "unexpectedByKind": {},
+    "unexpected": [],
+    "violations": {
+      "isolation": [],
+      "invalidGrant": []
+    },
+    "sessions": {
+      "requested": 5889,
+      "active": 5889,
+      "neverActive": 0,
+      "finished": 5889,
+      "timeToActiveMs": {
+        "count": 5889,
+        "p50": 5014,
+        "p95": 10030,
+        "p99": 10046,
+        "max": 10330
+      },
+      "commands": 23215,
+      "diagnostics": 9466
+    },
+    "logins": {
+      "ok": 301,
+      "failed": 0
+    },
+    "fleetSamples": [
+      {
+        "at": 1793254560010,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793254620002,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793254680013,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793254740000,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793254800000,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793254860011,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793254920003,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793254980000,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255040012,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255100009,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255160011,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255220006,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255280004,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255340012,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255400007,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255460004,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255520006,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255580007,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255640001,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255700010,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255760006,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255820012,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255880010,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793255940003,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256000000,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256060008,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256120013,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256180014,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256240015,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256300005,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256360014,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256420004,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256480001,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256540012,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256600001,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256660013,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256720001,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256780010,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256840003,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256900014,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793256960002,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257020008,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257080001,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257140002,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257200002,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257260011,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257320004,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257380012,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257440000,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257500012,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257560012,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257620014,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257680010,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257740006,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257800007,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257860003,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257920014,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793257980012,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793258040013,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      },
+      {
+        "at": 1793258100011,
+        "online": 120,
+        "hubs": 120,
+        "status": 200
+      }
+    ]
+  },
+  "commands": {
+    "states": {
+      "confirmed": 21895
+    },
+    "reasons": {},
+    "ackMs": {
+      "count": 21895,
+      "p50": 36,
+      "p95": 113,
+      "p99": 364,
+      "max": 2681
+    },
+    "slowest": [
+      {
+        "commandId": "d60fb483-9c51-4049-b504-db0318d934e9",
+        "grantId": "01752022-59f3-4593-8980-e74c33afc026",
+        "status": "confirmed",
+        "ms": 2681
+      },
+      {
+        "commandId": "068cba8e-181a-426f-84c9-2701df65893f",
+        "grantId": "1b30664d-88f7-4f89-bf55-b2291fc05a94",
+        "status": "confirmed",
+        "ms": 2389
+      },
+      {
+        "commandId": "925c2808-e4fd-4a45-8a93-67b9ebc5e89e",
+        "grantId": "0cbe8697-1ff4-4dd5-bd27-ba70a6e4ae51",
+        "status": "confirmed",
+        "ms": 2280
+      },
+      {
+        "commandId": "583859a1-9e62-432f-8ab7-18b8aa7619d7",
+        "grantId": "cd22940a-768a-4ec5-980d-fc133a5be45b",
+        "status": "confirmed",
+        "ms": 2206
+      },
+      {
+        "commandId": "ee5b0071-29db-4c55-bceb-0cf85e4e7ed7",
+        "grantId": "2e85425f-37c0-4e63-abe7-3b4333996e77",
+        "status": "confirmed",
+        "ms": 2152
+      }
+    ]
+  },
+  "hubs": {
+    "devices": 1200,
+    "deviceStatePublishes": 181315,
+    "deviceCommandsExecuted": 23215,
+    "ownerApprovals": 5889,
+    "ownerApprovalFailures": 0,
+    "ownerApprovalsAfterWithdrawal": 0,
+    "cloudLinkDownSamples": 0,
+    "trace": {
+      "slowCommands": [],
+      "unansweredRequests": [],
+      "approvalFailures": []
+    }
+  },
+  "adversarial": {
+    "forged": {
+      "sent": 1564,
+      "refused": 1564,
+      "accepted": 0,
+      "reasons": {
+        "bad signature": 1564
+      }
+    },
+    "replayed": {
+      "sent": 1549,
+      "refused": 1549,
+      "accepted": 0,
+      "reasons": {
+        "replayed": 1549
+      }
+    },
+    "brokerIsolation": {
+      "probes": 260,
+      "controlFailures": 0,
+      "subscribeGranted": 0,
+      "violations": []
+    }
+  },
+  "cloudProcess": {
+    "avgCpuPercentOfOneCore": 11,
+    "rssMb": {
+      "count": 391,
+      "p50": 225,
+      "p95": 248,
+      "p99": 252,
+      "max": 471
+    }
+  },
+  "database": {
+    "sizeMb": 98,
+    "auditRecords": 76924,
+    "hubAuditRecords": 59730,
+    "grants": 5889,
+    "notificationsByStatus": {
+      "delivered": 17667
+    }
+  },
+  "auditVerify": {
+    "error": "POST /api/v1/audit/verify: 401 {\"error\":\"unauthorized\",\"message\":\"sign in again\"}",
+    "ms": 10
+  }
+}
