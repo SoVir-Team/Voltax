@@ -39,6 +39,7 @@ const cloud = await createCloud({
     publicOrigin: config.PUBLIC_ORIGIN,
     brokerUrl: config.BROKER_PUBLIC_URL,
     trustProxy: config.TRUST_PROXY || false,
+    uiDir: config.ADMIN_UI_DIR || undefined,
   },
   server: { logger: { level: config.LOG_LEVEL } },
   broker: config.CLOUD_BROKER_URL ? { url: config.CLOUD_BROKER_URL, password: config.CLOUD_BROKER_PASSWORD!, caFile: config.CLOUD_BROKER_CA } : undefined,

@@ -4,14 +4,29 @@
     {
       "name": "voltax-dev-hub",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 8080
     },
     {
       "name": "voltax-dev-hub-demo",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["backend/hub/dev/dev-hub.mjs", "--demo"],
+      "runtimeArgs": [
+        "backend/hub/dev/dev-hub.mjs",
+        "--demo"
+      ],
       "port": 8080
+    },
+    {
+      "name": "voltax-dev-cloud-demo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "backend/cloud/dev/dev-cloud.mjs",
+        "--demo"
+      ],
+      "port": 8090
     }
   ]
 }

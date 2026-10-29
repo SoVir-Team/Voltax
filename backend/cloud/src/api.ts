@@ -1,3 +1,4 @@
+import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from 'fastify';
 import {
   assignmentCreateSchema,
@@ -15,6 +16,7 @@ import {
   type MeView,
   type PlatformScope,
 } from '@voltax/contracts';
+import { existsSync } from 'node:fs';
 import { z } from 'zod';
 import type { CloudAudit } from './audit.js';
 import { CloudError, badRequest, forbidden, notFound } from './errors.js';
@@ -39,7 +41,25 @@ export interface CloudApiConfig {
   trustProxy?: string | false;
   /** Login and setup attempts per client IP per minute. */
   loginLimitPerMinute?: number;
+  /** Static export of frontend/admin, served on the API's origin (same-origin cookies, no CORS). */
+  uiDir?: string;
 }
+
+// Portal pages: same-origin everything. Inline scripts/styles are the Next.js static export's
+// bootstrap data and the theme snippet; nothing is loaded from another origin.
+const UI_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
 
 export interface CloudApiDeps {
   audit: CloudAudit;
@@ -89,6 +109,7 @@ export async function buildCloudApi(deps: CloudApiDeps, serverOptions: FastifySe
     reply.header('x-frame-options', 'DENY');
     reply.header('referrer-policy', 'no-referrer');
     if (req.url.startsWith('/api/')) reply.header('cache-control', 'no-store');
+    else reply.header('content-security-policy', UI_CSP);
     if (config.cookieSecure) reply.header('strict-transport-security', 'max-age=31536000');
   });
 
@@ -307,6 +328,12 @@ export async function buildCloudApi(deps: CloudApiDeps, serverOptions: FastifySe
   });
 
   for (const plugin of deps.plugins ?? []) await plugin(app);
+
+  // Company portal. Its wildcard route sits under the /api guard above: an unknown /api path
+  // still gets the JSON 404, never a page. redirect: /staff -> /staff/.
+  if (config.uiDir && existsSync(config.uiDir)) {
+    await app.register(fastifyStatic, { root: config.uiDir, prefix: '/', redirect: true });
+  }
   return app;
 }
 

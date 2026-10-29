@@ -101,7 +101,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
       expired: 'Support access has expired.',
     };
     const body = text[g.status];
-    if (body) void push.notify(g.staff.staffId, { title: 'VOLTEX support access', body, url: `/homes/${g.homeId}/grants/${g.grantId}` }).catch(() => undefined);
+    if (body) void push.notify(g.staff.staffId, { title: 'VOLTEX support access', body, url: `/home/?id=${g.homeId}#grants` }).catch(() => undefined);
   });
 
   const route = async (hubId: string, msg: HubMessage): Promise<void> => {

@@ -20,9 +20,11 @@ firmware/esphome/.esphome/
 
 # local dev hub data
 backend/hub/.dev-data/
+backend/cloud/.dev-data/
 
 # Next.js
 .next/
 frontend/web/out/
+frontend/admin/out/
 next-env.d.ts
 *.tsbuildinfo
