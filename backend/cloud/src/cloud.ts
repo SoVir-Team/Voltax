@@ -65,7 +65,6 @@ export interface Cloud {
   close(): Promise<void>;
 }
 
-const quietLog: BrokerLog = { info: () => undefined, warn: () => undefined };
 
 /** Wires the cloud services together. The caller owns starting the HTTP listener. */
 export async function createCloud(opts: CloudOptions): Promise<Cloud> {
@@ -118,7 +117,11 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
         return grants.handleHubMessage(hubId, msg);
     }
   };
-  if (opts.broker) broker = new BrokerLink(opts.broker, route, opts.log ?? quietLog);
+  // Background parts (broker link, audit export) log through the server's logger unless told
+  // otherwise; it only exists once the API is built, and they only log after start().
+  let appRef: FastifyInstance | undefined;
+  const log: BrokerLog = opts.log ?? { info: (o, m) => appRef?.log.info(o, m), warn: (o, m) => appRef?.log.warn(o, m) };
+  if (opts.broker) broker = new BrokerLink(opts.broker, route, log);
 
   const checkpointPublicKeyPem = auditKey?.publicKeyPem ?? null;
   const app = await buildCloudApi(
@@ -132,6 +135,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
     },
     opts.server,
   );
+  appRef = app;
 
   let exportTimer: NodeJS.Timeout | undefined;
   let retentionTimer: NodeJS.Timeout | undefined;
@@ -165,7 +169,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
           if (auditExport.enabled) await auditExport.runAll();
           else await checkpoints.create();
         };
-        exportTimer = setInterval(() => void tick().catch((err: Error) => (opts.log ?? quietLog).warn({ err: err.message }, 'audit export failed')), opts.auditExportIntervalMs ?? 5 * 60_000);
+        exportTimer = setInterval(() => void tick().catch((err: Error) => log.warn({ err: err.message }, 'audit export failed')), opts.auditExportIntervalMs ?? 5 * 60_000);
         exportTimer.unref();
       }
     },
@@ -175,6 +179,7 @@ export async function createCloud(opts: CloudOptions): Promise<Cloud> {
       grants.stop();
       fleet.stop();
       notifications.stop();
+      opts.email?.close?.();
       await broker?.stop();
       await app.close();
       await opts.db.close();

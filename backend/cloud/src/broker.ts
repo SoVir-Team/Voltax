@@ -28,7 +28,14 @@ export interface BrokerLinkConfig {
   url: string;
   password: string;
   caFile?: string;
+  /** How long start() waits for the first connection before carrying on without it (default 10 s). */
+  startTimeoutMs?: number;
+  reconnectMs?: number;
+  /** Retry interval for a refused subscription (default 5 s). */
+  resubscribeMs?: number;
 }
+
+const SUBSCRIPTIONS = [`${CLOUD_TOPIC_ROOT}/+/up`, `${CLOUD_TOPIC_ROOT}/+/status`];
 
 export interface BrokerLog {
   info(obj: unknown, msg?: string): void;
@@ -52,30 +59,59 @@ export class BrokerLink implements HubTransport {
     private log: BrokerLog,
   ) {}
 
+  get connected(): boolean {
+    return this.client?.connected ?? false;
+  }
+
+  /**
+   * Connects, and keeps reconnecting for as long as the cloud runs. The cloud starts even when the
+   * broker is not reachable yet (on a cold start EMQX's auth webhook is this very process): until
+   * the link is up, publish() refuses, so nothing reaches a hub, and the API keeps answering.
+   */
   async start(): Promise<void> {
     this.client = mqtt.connect(this.config.url, {
       username: CLOUD_SERVICE_USER,
       password: this.config.password,
       clientId: `voltax-cloud-${process.pid}-${Math.random().toString(16).slice(2, 8)}`,
       clean: true,
-      reconnectPeriod: 2000,
+      reconnectPeriod: this.config.reconnectMs ?? 2000,
       ...(this.config.caFile ? { ca: readFileSync(this.config.caFile) } : {}),
     });
     this.client.on('message', (topic, payload) => void this.receive(topic, payload));
     this.client.on('error', (err) => this.log.warn({ err: err.message }, 'cloud broker error'));
+    let subscribed: Promise<void> = Promise.resolve();
     this.client.on('connect', () => {
-      void this.client!.subscribeAsync([`${CLOUD_TOPIC_ROOT}/+/up`, `${CLOUD_TOPIC_ROOT}/+/status`], { qos: 1 });
       this.log.info({}, 'connected to cloud broker');
+      subscribed = this.subscribe();
     });
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('cloud broker connection timed out')), 10_000);
+    const connected = await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(false), this.config.startTimeoutMs ?? 10_000);
       this.client!.once('connect', () => {
         clearTimeout(timer);
-        resolve();
+        resolve(true);
       });
     });
-    // Wait for the subscription so no early hub message is missed.
-    await this.client.subscribeAsync([`${CLOUD_TOPIC_ROOT}/+/up`, `${CLOUD_TOPIC_ROOT}/+/status`], { qos: 1 });
+    if (connected) await subscribed; // so no early hub message is missed
+    else this.log.warn({}, 'cloud broker not reachable yet; retrying in the background (remote support is unavailable until then)');
+  }
+
+  /**
+   * Subscribes to every hub's up/status topics. A refused subscription (EMQX answers 0x80 while its
+   * authorisation source is still starting) is retried: connected-but-deaf would silently lose
+   * every grant status and command result.
+   */
+  private async subscribe(): Promise<void> {
+    const client = this.client;
+    while (client && client === this.client && client.connected) {
+      try {
+        const granted = await client.subscribeAsync(SUBSCRIPTIONS, { qos: 1 });
+        if (granted.every((g) => g.qos !== 128)) return;
+      } catch {
+        /* refused or interrupted: retry below */
+      }
+      this.log.warn({}, 'cloud broker refused the subscription; retrying');
+      await new Promise((r) => setTimeout(r, this.config.resubscribeMs ?? 5000));
+    }
   }
 
   async stop(): Promise<void> {
