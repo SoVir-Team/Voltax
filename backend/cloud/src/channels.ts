@@ -20,9 +20,11 @@ export class SmtpEmail implements EmailChannel {
 
   constructor(private cfg: SmtpConfig) {
     // Bounded waits: a hanging mail server must not hold up grant handling (nodemailer defaults to minutes).
+    // Pooled: start notices gate remote support, and a connection (TCP, greeting, TLS) per notice
+    // made them queue up under load; a few reused connections deliver in milliseconds each.
     const t = cfg.timeoutMs ?? 10_000;
     this.transport = nodemailer.createTransport(
-      { url: cfg.url, connectionTimeout: t, greetingTimeout: t, socketTimeout: t * 2 },
+      { url: cfg.url, pool: true, maxConnections: 3, maxMessages: 100, connectionTimeout: t, greetingTimeout: t, socketTimeout: t * 2 },
       { disableFileAccess: true, disableUrlAccess: true },
     );
   }
@@ -34,6 +36,10 @@ export class SmtpEmail implements EmailChannel {
       const code = (err as { responseCode?: number }).responseCode;
       throw new NotificationError(`smtp ${code ?? 'connection'} error`, code !== undefined && code >= 500);
     }
+  }
+
+  close(): void {
+    this.transport.close();
   }
 }
 

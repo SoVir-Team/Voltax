@@ -6,6 +6,7 @@ import type { Db } from './db.js';
 /** An email provider. Throw NotificationError; permanent = retrying cannot help (bad address, 5xx). */
 export interface EmailChannel {
   send(message: { to: string; subject: string; text: string }): Promise<void>;
+  close?(): void;
 }
 
 export class NotificationError extends Error {
