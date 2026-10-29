@@ -103,8 +103,9 @@ export async function buildApi(deps: ApiDeps, serverOptions: FastifyServerOption
     return payload;
   });
 
-  app.setErrorHandler((err: Error & { statusCode?: number }, req, reply) => {
-    const status = err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
+  app.setErrorHandler((err: Error & { statusCode?: number; expose?: boolean }, req, reply) => {
+    // Server errors stay generic, except ones written for the user (e.g. "email unavailable, try later").
+    const status = err.statusCode && (err.statusCode < 500 || err.expose === true) ? err.statusCode : 500;
     if (status === 500) req.log.error({ err }, 'request failed');
     void reply.status(status).send({ error: status === 500 ? 'internal error' : err.message });
   });

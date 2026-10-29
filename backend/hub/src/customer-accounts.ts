@@ -16,7 +16,8 @@ const DAY = 86400_000;
 export const CUSTOMER_COOKIE = 'voltax_customer';
 export const SETUP_COOKIE = 'voltax_customer_setup';
 export const SESSION_TTL = 30 * DAY;
-export class CustomerError extends Error { constructor(public statusCode: number, message: string) { super(message); } }
+/** Its message is written for the customer and is always shown (also for 503 "try again later"). */
+export class CustomerError extends Error { readonly expose = true; constructor(public statusCode: number, message: string) { super(message); } }
 
 /** Household identity stays on the hub, apart from staff identity. All permission checks use its client principal. */
 export class CustomerAccounts {
@@ -42,8 +43,9 @@ export class CustomerAccounts {
     const key = Buffer.from(expected!, 'base64');
     return actual.length === key.length && timingSafeEqual(actual, key);
   }
+  /** Any active owner claims the home, with or without an account (owners paired before accounts existed too). */
   get claimed(): boolean {
-    return !!this.db.prepare("SELECT 1 FROM customer_accounts a JOIN clients c ON c.client_id=a.client_id WHERE c.role='owner' AND c.revoked_at IS NULL").get();
+    return !!this.db.prepare("SELECT 1 FROM clients WHERE role='owner' AND revoked_at IS NULL").get();
   }
   ready(): Extract<HubMessage, { type: 'customer.ready' }> {
     if (performance.now() - this.challengeAt > 240_000) { this.challenge = token(); this.challengeAt = performance.now(); }

@@ -132,6 +132,12 @@ export async function startCloud(opts: StartOptions = {}): Promise<TestCloud> {
           return reply({ type: 'activity.result', requestId: envelope.requestId, grantId: envelope.grantId, events: [] });
         case 'grant.revoke':
           return reply({ type: 'grant.status', grantId: envelope.grantId, status: envelope.outcome === 'completed' ? 'completed' : 'revoked', at: Date.now(), reason: envelope.reason });
+        case 'customer.onboard': {
+          // Like backend/hub: a 10-character code, then a fresh challenge (each one works once).
+          const code = randomBytes(10).toString('hex').toUpperCase().slice(0, 10);
+          reply({ type: 'customer.onboard.result', requestId: envelope.envelopeId, result: { ok: true, code, expiresAt: Date.now() + 600_000, email: envelope.email } });
+          return reply({ type: 'customer.ready', challenge: randomBytes(32).toString('base64url'), claimed: false });
+        }
         default:
           return;
       }
@@ -214,6 +220,8 @@ export async function startCloud(opts: StartOptions = {}): Promise<TestCloud> {
         update: { state: 'idle' },
         at: Date.now(),
       });
+      // The hub announces a fresh onboarding challenge with its telemetry (see backend/hub cloud-link).
+      await cloud.route(hubId, { type: 'customer.ready', challenge: randomBytes(32).toString('base64url'), claimed: false });
     },
     async activeGrant(homeId: string, staff: Pick<TestStaff, 'staffId' | 'role'>, actions?: GrantAction[], devices = ['kitchen']) {
       const allowed = actions ?? GRANT_ACTIONS.filter((a) => platformScope(staff.role, a) === 'grant');

@@ -54,6 +54,15 @@ describe('cloud link', () => {
     expect(raw).not.toMatch(/relay_1|boot_button|"state":(true|false)|"name"/);
   });
 
+  it('announces whether the home has an owner, with a fresh one-time challenge, alongside telemetry', async () => {
+    const { up } = await withCloud();
+    env!.hub.cloud!.sendTelemetry();
+    await waitFor(() => up.some((m) => m.type === 'customer.ready'));
+    const ready = up.find((m) => m.type === 'customer.ready') as Extract<HubMessage, { type: 'customer.ready' }>;
+    expect(ready.claimed).toBe(false);
+    expect(ready.challenge).toBe(env!.hub.customers.ready().challenge);
+  });
+
   it('delivers signed envelopes from its own down topic to the grant service and answers on up', async () => {
     const { up } = await withCloud();
     const grantId = randomUUID();

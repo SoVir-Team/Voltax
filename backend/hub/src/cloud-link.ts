@@ -106,6 +106,8 @@ export class CloudLink {
   sendTelemetry(): void {
     const telemetry = telemetrySchema.safeParse({ ...this.deps.telemetry(), at: Date.now() });
     if (telemetry.success) this.send({ type: 'telemetry', telemetry: telemetry.data });
+    // Lets the admin portal offer "Generate owner code" while the home has no owner (see customer-accounts.ts).
+    if (this.deps.customerReady) this.send(this.deps.customerReady());
   }
 
   /** Copies audit records off the hub in order. The cursor only advances after the broker accepted a batch. */

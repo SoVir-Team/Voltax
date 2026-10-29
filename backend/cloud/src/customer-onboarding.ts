@@ -35,7 +35,7 @@ export class CustomerOnboarding {
     if (actor.role !== 'PLATFORM_SUPER_ADMIN') throw new CloudError(403, 'forbidden', 'Only the platform admin can provision a homeowner.');
     const hubId = await this.homes.hubOf(homeId);
     const state = hubId ? this.states.get(hubId) : undefined;
-    if (!hubId || !state || Date.now() - state.seen > 180_000 || !(await this.state(homeId)).available || !this.signer) throw new CloudError(503, 'hub_unavailable', 'The home hub is unavailable. Start it and try again.');
+    if (!hubId || !state || !state.challenge || Date.now() - state.seen > 180_000 || !(await this.state(homeId)).available || !this.signer) throw new CloudError(503, 'hub_unavailable', 'The home hub is unavailable. Start it and try again.');
     if (state.claimed) throw conflict('This home already has a customer owner.');
     if ([...this.pending.values()].some(p => p.hubId === hubId)) throw conflict('A code request is already in progress for this home.');
     const requestId = randomUUID();
@@ -45,10 +45,11 @@ export class CustomerOnboarding {
     const timer = setTimeout(() => { this.pending.delete(requestId); resolveResult({ ok: false, message: 'The home hub did not respond. Try again when it is online.' }); }, 8000);
     this.pending.set(requestId, { hubId, done: resolveResult, timer });
     try {
-      await this.transport.publish(hubId, this.signer.sign({ v: 1, type: 'customer.onboard', envelopeId: requestId, hubId, actor, email, challenge: state.challenge, issuedAt: now, expiresAt: now + 60_000 }));
+      const challenge = state.challenge;
+      state.challenge = ''; // Each hub challenge is used once, answered or not: the next request waits for a fresh one.
+      await this.transport.publish(hubId, this.signer.sign({ v: 1, type: 'customer.onboard', envelopeId: requestId, hubId, actor, email, challenge, issuedAt: now, expiresAt: now + 60_000 }));
       const response = await result;
       if (!response.ok) throw new CloudError(409, 'onboarding_refused', response.message);
-      state.challenge = ''; // Wait for a fresh hub challenge before another code request.
       await this.audit.append({ actor: `staff:${actor.staffId}`, action: 'home.onboard', outcome: 'ok', homeId, target: `home:${homeId}` });
       return { code: `${response.code.slice(0,5)}-${response.code.slice(5)}`, expiresAt: response.expiresAt, email: response.email };
     } finally { clearTimeout(timer); this.pending.delete(requestId); }
