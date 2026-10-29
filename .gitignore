@@ -28,3 +28,6 @@ frontend/web/out/
 frontend/admin/out/
 next-env.d.ts
 *.tsbuildinfo
+
+# Load-test smoke runs and logs (official results go to docs/testing/)
+tools/loadtest/.out/
