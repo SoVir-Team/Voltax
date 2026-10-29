@@ -302,6 +302,11 @@ export async function buildCloudApi(deps: CloudApiDeps, serverOptions: FastifySe
     homes.update(homeIdOf(req), parse(homeUpdateSchema, req.body), staffIdOf(req)),
   );
 
+  app.delete('/api/v1/homes/:homeId', { config: { guard: { action: 'home.delete', home: 'params' } } }, async (req, reply) => {
+    await homes.remove(homeIdOf(req), staffIdOf(req));
+    return reply.status(204).send();
+  });
+
   app.get('/api/v1/homes/:homeId/contact', { config: { guard: { action: 'home.contact.read', home: 'params' } } }, async (req) => {
     const homeId = homeIdOf(req);
     await audit.append({ actor: `staff:${staffIdOf(req)}`, action: 'home.contact.read', outcome: 'allowed', target: `home:${homeId}`, homeId });

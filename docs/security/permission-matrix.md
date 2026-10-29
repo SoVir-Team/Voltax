@@ -34,6 +34,7 @@ support grant that the home owner approved **on the hub**. The hub re-checks eve
 | Staff: read / manage, role changes, credential reset | platform | — | — |
 | Home assignments | platform | — | — |
 | Homes: create / update metadata | platform | — | — |
+| Homes: delete (only a home that never went live: no connected hub, no support history; audit trail kept) | platform | — | — |
 | Homes: read operational metadata | platform | assigned | assigned |
 | Home owner contact | — | assigned | assigned |
 | Hubs: register (provisioning) | platform | — | assigned |

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PLATFORM_ROLES, platformScope, type PlatformAction, type PlatformRole } from '@voltax/contracts';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { CloudGuard } from '../src/guard.js';
 import { hubRelease, startCloud, type TestCloud, type TestStaff } from './helpers.js';
 
@@ -45,6 +45,13 @@ const ROUTES: Record<string, Build> = {
   'POST /api/v1/homes': async () => ({ url: '/api/v1/homes', body: { name: 'Another home' } }),
   'GET /api/v1/homes/:homeId': async (h) => ({ url: `/api/v1/homes/${h}` }),
   'PATCH /api/v1/homes/:homeId': async (h) => ({ url: `/api/v1/homes/${h}`, body: { name: 'Renamed home' } }),
+  // A fresh, never-live home each time (deleting homeA/homeB would break the rest); in the "assigned"
+  // case it is assigned to the support and installer accounts, who must still be refused.
+  'DELETE /api/v1/homes/:homeId': async (h) => {
+    const fresh = await c.addHome('Delete me');
+    if (h === homeA) for (const r of ['PLATFORM_SUPPORT', 'INSTALLER'] as const) await c.assign(staffByRole[r].staffId, fresh);
+    return { url: `/api/v1/homes/${fresh}` };
+  },
   'GET /api/v1/homes/:homeId/contact': async (h) => ({ url: `/api/v1/homes/${h}/contact` }),
   'GET /api/v1/homes/:homeId/hub': async (h) => ({ url: `/api/v1/homes/${h}/hub` }),
   'POST /api/v1/homes/:homeId/hub': async (h) => ({ url: `/api/v1/homes/${h}/hub`, body: { hubId: (await c.homes.hubOf(h))! } }),
@@ -124,6 +131,10 @@ describe('permission matrix: coverage', () => {
 });
 
 describe.each(PLATFORM_ROLES)('permission matrix: %s', (role) => {
+  // Homes made for the delete check keep no assignments, so the later isolation checks see only homeA.
+  afterEach(async () => {
+    await c.db.query("UPDATE assignments SET revoked_at = $1 WHERE revoked_at IS NULL AND home_id IN (SELECT id FROM homes WHERE name = 'Delete me')", [Date.now()]);
+  });
   for (const [key, build] of Object.entries(ROUTES)) {
     const [method, path] = key.split(' ') as [string, string];
     const homeRoute = path.includes(':homeId');

@@ -24,6 +24,7 @@ export const PLATFORM_ACTIONS = [
   'home.onboard',
   'home.create',
   'home.update',
+  'home.delete', // only a home that never went live: no connected hub, no support history
   'home.read', // operational metadata: name, hub id, connectivity, versions
   'home.contact.read', // owner notification contact
   'hub.register',
@@ -61,6 +62,7 @@ export const PLATFORM_PERMISSIONS: Record<PlatformAction, Partial<Record<Platfor
   'home.onboard': { [SA]: 'platform' },
   'home.create': { [SA]: 'platform' },
   'home.update': { [SA]: 'platform' },
+  'home.delete': { [SA]: 'platform' },
   'home.read': { [SA]: 'platform', [SUP]: 'assigned', [INS]: 'assigned' },
   'home.contact.read': { [SUP]: 'assigned', [INS]: 'assigned' },
   'hub.register': { [SA]: 'platform', [INS]: 'assigned' },

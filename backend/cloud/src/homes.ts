@@ -76,6 +76,20 @@ export class HomesService {
     return this.get(id);
   }
 
+  /** Removes a home that never went live (clutter from mistakes and tests); its audit trail stays. */
+  async remove(homeId: string, by: string): Promise<void> {
+    const home = await this.row(homeId);
+    if (home.last_seen_at !== null) throw conflict('This home has a hub that connected, so it cannot be deleted.');
+    const [grant] = await this.db.query('SELECT 1 FROM grants WHERE home_id = $1 LIMIT 1', [homeId]);
+    if (grant) throw conflict('This home has support access history, so it cannot be deleted.');
+    await this.db.tx(async (t) => {
+      await t.query('DELETE FROM assignments WHERE home_id = $1', [homeId]);
+      await t.query('DELETE FROM hubs WHERE home_id = $1', [homeId]);
+      await t.query('DELETE FROM homes WHERE id = $1', [homeId]);
+    });
+    await this.audit.append({ actor: `staff:${by}`, action: 'home.delete', outcome: 'ok', target: `home:${homeId}`, homeId, details: { name: home.name, hubId: home.hub_id } });
+  }
+
   async update(homeId: string, patch: { name?: string; ownerContact?: string | null }, by: string): Promise<HomeView> {
     await this.row(homeId);
     if (patch.name !== undefined) await this.db.query('UPDATE homes SET name = $2 WHERE id = $1', [homeId, patch.name.trim()]);

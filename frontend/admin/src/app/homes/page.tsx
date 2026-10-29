@@ -15,6 +15,14 @@ export default function HomesPage() {
   const homes = useLoad(() => api<HomeView[]>('/homes'));
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
+  const { run } = useAction();
+  const canDelete = can('home.delete');
+
+  /** Only a home that never went live can be deleted; the server enforces it too. */
+  async function remove(h: HomeView) {
+    if (!confirm(`Delete "${h.name}"? This cannot be undone.`)) return;
+    if (await run(async () => { await api(`/homes/${h.homeId}`, { method: 'DELETE' }); }, 'Home deleted')) homes.reload();
+  }
   const shown = (homes.data ?? []).filter((h) => !q || h.name.toLowerCase().includes(q) || h.hub?.hubId.includes(q));
 
   return (
@@ -26,7 +34,7 @@ export default function HomesPage() {
       <div className="cols">
         <Card>
           <Table
-            head={['Home', 'Hub', 'Status', 'Version', 'Devices']}
+            head={['Home', 'Hub', 'Status', 'Version', 'Devices', ...(canDelete ? [''] : [])]}
             empty={homes.data ? 'No homes match.' : 'Loading…'}
             rows={shown.map((h) => (
               <tr key={h.homeId}>
@@ -46,6 +54,15 @@ export default function HomesPage() {
                 </td>
                 <td>{h.hub?.version ?? '—'}</td>
                 <td>{h.hub ? `${h.hub.devicesOnline}/${h.hub.devicesTotal} online` : '—'}</td>
+                {canDelete && (
+                  <td>
+                    {!h.hub?.lastSeenAt && (
+                      <button type="button" className="btn danger sm" onClick={() => void remove(h)}>
+                        Delete
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           />
