@@ -205,6 +205,9 @@ describe('every cloud request is verified on the hub', () => {
     await waitFor(() => env.device.relay === true);
     deliver(m);
     expect(lastRejection()?.reason).toBe('replayed');
+    // The id belongs to the envelope already accepted: naming it would let a duplicate delivery
+    // overwrite that envelope's real outcome in the cloud.
+    expect(lastRejection()?.envelopeId).toBeUndefined();
   });
 
   it('refuses everything while the hub clock is not synchronised (fail-closed)', async () => {

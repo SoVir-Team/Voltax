@@ -119,6 +119,12 @@ describe('using an approved grant', () => {
       return l[0]?.status === 'confirmed' ? l : undefined;
     });
     expect(list[0]).toMatchObject({ commandId: cmd.body.commandId, status: 'confirmed' });
+
+    // A refusal naming a finished command (e.g. a duplicate delivery refused as a replay by an older
+    // hub) must not rewrite its real outcome.
+    await c.route(HUB, { type: 'envelope.rejected', envelopeId: env.envelopeId, reason: 'replayed' });
+    const after = (await c.req('GET', `/api/v1/homes/${home}/grants/${grantId}/commands`, { cookie: support.cookie })).body;
+    expect(after[0]).toMatchObject({ commandId: cmd.body.commandId, status: 'confirmed' });
   });
 
   it('refuses another staff member, an ungranted device and an ungranted action', async () => {

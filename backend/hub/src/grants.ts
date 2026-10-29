@@ -119,7 +119,10 @@ export class SupportGrants {
   handle(raw: unknown): void {
     const checked = this.deps.verifier.check(raw);
     if (!checked.ok) {
-      this.refuse('cloud', 'envelope', checked.reason, checked.envelopeId);
+      // A replay carries the id of an envelope this hub already accepted. Naming it to the cloud would
+      // let a duplicate delivery overwrite that envelope's real outcome there, so it is only audited.
+      if (checked.reason === 'replayed') this.refuse('cloud', 'envelope', checked.reason, undefined, { replayOf: checked.envelopeId });
+      else this.refuse('cloud', 'envelope', checked.reason, checked.envelopeId);
       return;
     }
     const env = checked.envelope;

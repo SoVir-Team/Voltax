@@ -334,9 +334,10 @@ export class GrantService {
       await this.onStatus(hubId, { type: 'grant.status', grantId: grant.grant_id, status: 'rejected', at: this.now(), reason: `hub refused: ${msg.reason}` });
       return;
     }
+    // Only a command still waiting can be refused: a refusal never rewrites an outcome already reported.
     await this.db.query(
       `UPDATE grant_commands c SET status = 'refused', reason = $2, updated_at = $3 FROM grants g
-       WHERE c.envelope_id = $1 AND g.grant_id = c.grant_id AND g.hub_id = $4`,
+       WHERE c.envelope_id = $1 AND g.grant_id = c.grant_id AND g.hub_id = $4 AND c.status = 'sent'`,
       [msg.envelopeId, msg.reason, this.now(), hubId],
     );
   }
