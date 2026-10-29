@@ -5,7 +5,8 @@
     "shared/contracts",
     "backend/hub",
     "backend/cloud",
-    "frontend/web"
+    "frontend/web",
+    "frontend/admin"
   ],
   "engines": {
     "node": ">=24"
@@ -19,6 +20,7 @@
     "test:host": "node tools/test-host.mjs",
     "test:pg": "npm run test:pg -w backend/cloud",
     "test:brokers": "npm run test:brokers -w backend/cloud",
-    "test:services": "npm run test:services -w backend/cloud"
+    "test:services": "npm run test:services -w backend/cloud",
+    "dev:admin": "npm run dev -w frontend/admin"
   }
 }

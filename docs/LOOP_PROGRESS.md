@@ -237,10 +237,60 @@ ESP32 OTA or secure boot.
 
 ## P7. Web apps (PWAs)
 
-- [ ] Admin portal (`frontend/admin`): all screens, PWA, Web Push
-- [ ] Customer app: support access, member devices, promote/demote, push opt-in, update approval, dark theme, search/rooms
-- [ ] Hub fixes: reference validation, optimistic concurrency, revert-timer cancel, `.gitignore` device secrets
-- [ ] Browser verification of every screen
+- [x] Admin portal (`frontend/admin`): all screens, PWA, Web Push
+- [x] Customer app: support access, member devices, promote/demote, push opt-in, update approval, dark theme, search/rooms
+- [x] Hub fixes: reference validation, optimistic concurrency, revert-timer cancel, `.gitignore` device secrets
+- [x] Browser verification of every screen (push delivery itself: not verified, see below)
+
+- **Hub** (`0897333`): schedules and automations must point at an existing switch (400 otherwise);
+  `PUT` carries the `version` it edited and gets 409 when stale; any accepted automation edit clears
+  its revert timer; `secrets.*.yaml` ignored. New: device rooms, `PUT /clients/:id/role` with the
+  last-owner rule (409), `GET /me`, Web Push (VAPID keys made on the hub, host allow-list, owner and
+  member topics, subscriptions dropped on revoke and on 404/410).
+- **Customer app** (`89f2ed1`): approve/reject/end support cards with history and a live banner on
+  every screen, member device choice at invite and later, promote/demote, update offers with the
+  owner policy, push opt-in (with the iPhone home-screen rule), light/dark/automatic theme, search,
+  filters and rooms.
+- **Admin portal** (`frontend/admin`, Next static export served by the cloud on its own origin):
+  sign-in (email + password + authenticator code), first-time setup from a one-time link (password,
+  then authenticator enrolment; the token is removed from the address bar), overview, homes and
+  home detail (hub facts, hub registration with the credential shown once, online/offline devices,
+  owner contact on request, assignments, hub audit copy), support access (request; requester-only
+  tools limited to the owner-approved actions: switch, diagnostics, activity, restart; finish and
+  revoke with a reason; command and owner-notice history), fleet and rollout detail
+  (halt/resume/cancel with reasons), releases (upload manifest + .minisig, verified by the cloud;
+  compatibility; withdraw), audit (records, chain + checkpoint verify, signed checkpoints), staff
+  (create with setup link shown once, role, disable, reset), settings (password, push, theme).
+  Menus and buttons follow the permission matrix; the cloud enforces it regardless. Service worker
+  precaches the app shell only; `/api` is never cached, and offline the portal says it cannot reach
+  the cloud instead of showing old data.
+- **Cloud:** `ADMIN_UI_DIR` serves the portal with a strict CSP (`default-src 'self'`,
+  `frame-ancestors 'none'`, ...); unknown `/api` paths stay JSON 404s. Staff push links open the
+  portal's home page. `backend/cloud/dev/dev-cloud.mjs --demo` runs the real cloud on PGlite with
+  throwaway keys and simulated hubs for local clicking (dev only; owner approval is simulated there).
+
+Evidence (2026-10-29):
+- Hub: `test/home-features.test.ts` 6/6 and 4 new `local-engine.test.ts` cases; hub 105/105.
+- Web: `format.test.ts` 14/14. Admin: `nav.test.ts` 3/3 (menus per role).
+- Cloud: `test/admin-ui.test.ts` 4/4 (pages with CSP, trailing-slash redirect, `/api` 404 stays
+  JSON, no path traversal); written first and seen failing (2/4) before the change.
+- `npm run typecheck` clean; `npm test`: contracts 18, hub 105, cloud 304 + 11 skipped, web 14,
+  admin 3. `npm run test:pg` (throwaway PostgreSQL 18): 311 passed + 4 skipped.
+- `npm run build -w frontend/admin`: 13 static routes, `sw.js` precaches 114 files; added to CI.
+- Browser (built-in preview, production builds):
+  - customer app against `dev-hub.mjs --demo`: support banner, approve, live session, end
+    session, update install (request file written), theme switch, rooms, search and offline
+    filter, member device edit, promote/demote; no console errors.
+  - admin portal against `dev-cloud.mjs --demo`: sign-in as support, request access, simulated
+    owner approval, diagnostics and a command reaching the hub; sign-in as super admin, register a
+    signed release through the form, compatibility (0.9.0 hub excluded by the minimum version),
+    rollout to the canary hub (done), audit chain verify (35 records, 1 checkpoint), staff reset and
+    first-time setup from the new link through to the signed-in overview; service worker active,
+    offline shell shown with the cloud stopped. Bugs found and fixed on the way: audit verify
+    response shape (crashed the page), rollout stage labels, desktop menu button, cramped tables.
+
+Not verified: real Web Push delivery to a phone or browser (needs HTTPS and a real push service;
+the preview had notifications blocked), and anything on a real Pi or ESP32.
 
 ## P8. Quality
 
@@ -265,6 +315,7 @@ ESP32 OTA or secure boot.
 | Workflow | Status | Used for |
 |---|---|---|
 | superpowers | used | test-driven development, verification before completion, systematic debugging (P5 grant race on real PostgreSQL) |
+| apple-design | used | P7 portal and app UI: press states, materials, reduced motion/transparency, typography |
 | ponytail | used | smallest complete change |
 | ECC (`D:\workspace\repos\ecc`) | planned | `security-reviewer`, `tdd-guide`, `database-reviewer` checklists |
 | Agentic Awesome Skills | planned | `auth-implementation-patterns`, `audit-logging`, `api-security-testing` |

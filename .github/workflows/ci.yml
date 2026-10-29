@@ -27,6 +27,8 @@ jobs:
       - run: npm test
       - name: Build web app (static export served by the hub)
         run: npm run build -w frontend/web
+      - name: Build admin portal (static export served by the cloud)
+        run: npm run build -w frontend/admin
 
   shell:
     name: Shell script syntax
